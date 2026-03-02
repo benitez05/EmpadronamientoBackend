@@ -3,6 +3,7 @@ using EmpadronamientoBackend.API.Filters;
 using EmpadronamientoBackend.API.Middleware;
 using EmpadronamientoBackend.Infrastructure.Persistence;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.OpenApi.Models; // Necesario para OpenApiServer
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Scalar.AspNetCore;
@@ -11,33 +12,45 @@ var builder = WebApplication.CreateBuilder(args);
 
 #region -------------------------------------------------- SERVICES
 
-// Logging base
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-// Controllers + filtros globales
-builder.Services
-    .AddControllers(options =>
+// 1. Configurar CORS para que tu PC pueda hablarle al Server
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowLocalScalar", policy =>
     {
-        options.Filters.Add<ValidationFilter>();
+        policy.AllowAnyOrigin() // O pon tu IP de casa para más seguridad
+              .AllowAnyMethod()
+              .AllowAnyHeader();
     });
+});
 
-// OpenAPI (Estándar .NET 9)
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<ValidationFilter>();
+});
+
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddOpenApi(); 
 
-// FluentValidation
-builder.Services
-    .AddFluentValidationAutoValidation()
-    .AddFluentValidationClientsideAdapters();
+// 2. Configurar el Selector de URLs en OpenAPI
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Servers = new List<OpenApiServer>
+        {
+            new OpenApiServer { Url = "http://localhost:5000", Description = "Local (Desarrollo)" },
+            new OpenApiServer { Url = "http://143.198.231.51:5000", Description = "DigitalOcean (Producción)" }
+        };
+        return Task.CompletedTask;
+    });
+});
 
-builder.Services.AddValidatorsFromAssemblyContaining<
-    EmpadronamientoBackend.Application.DTOs.Requests.PaginationParams>();
+builder.Services.AddFluentValidationAutoValidation().AddFluentValidationClientsideAdapters();
+builder.Services.AddValidatorsFromAssemblyContaining<EmpadronamientoBackend.Application.DTOs.Requests.PaginationParams>();
 
-// Infrastructure (MariaDB)
 builder.Services.AddInfrastructure(builder.Configuration);
-
-// 🔥 CAMBIO CRÍTICO: Pasamos builder.Configuration para que JWT pueda leer la Key
 builder.Services.AddApiTemplate(builder.Configuration);
 
 #endregion
@@ -46,11 +59,11 @@ var app = builder.Build();
 
 #region -------------------------------------------------- PIPELINE
 
-// Middleware global de excepciones (SIEMPRE primero)
 app.UseMiddleware<ExceptionMiddleware>();
-
-// Logging automático por request
 app.UseMiddleware<RequestLoggingMiddleware>();
+
+// 3. Habilitar CORS antes de los mapas
+app.UseCors("AllowLocalScalar");
 
 if (app.Environment.IsDevelopment())
 {
@@ -59,8 +72,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// 🔥 CAMBIO CRÍTICO: Debemos agregar Authentication antes de Authorization
 app.UseAuthentication(); 
 app.UseAuthorization();
 
