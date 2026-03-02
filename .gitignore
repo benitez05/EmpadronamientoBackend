@@ -1,0 +1,13 @@
+# Carpetas de compilación
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+
+# Archivos de configuración con datos sensibles
+API/appsettings.Development.json
+API/appsettings.json

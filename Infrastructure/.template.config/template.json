@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Roberto Benitez",
+  "classifications": [
+    "Web",
+    "API",
+    "ASP.NET Core",
+    "Clean Architecture"
+  ],
+  "identity": "BenitezBackendTemplate",
+  "name": "Roberto Benitez Enterprise Backend API",
+  "shortName": "template-api",
+  "sourceName": "BenitezBackendTemplate",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  }
+}
