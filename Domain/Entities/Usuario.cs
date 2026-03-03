@@ -1,11 +1,5 @@
-using BenitezLabs.Domain.Entities;
 namespace BenitezLabs.Domain.Entities;
 
-
-/// <summary>
-/// Representa un usuario dentro del sistema.
-/// Entidad principal de autenticación.
-/// </summary>
 public class Usuario
 {
     public int Id { get; set; }
@@ -18,24 +12,24 @@ public class Usuario
     public string? Celular { get; set; }
     public string? Imagen { get; set; }
 
-    // Refresh Tokens
-    public string? RefreshToken { get; set; }
-    public DateTime? RefreshTokenExpiration { get; set; }
-    public DateTime? RefreshTokenCreated { get; set; }
+    // --- CONFIRMACIÓN (Los que me reclamaste, aquí están de vuelta) ---
+    public bool CorreoConfirmado { get; set; }
+    public string? TokenConfirmacionCorreo { get; set; }
 
-    // Seguridad
+    // --- SEGURIDAD ---
     public int IntentosFallidos { get; set; }
     public DateTime? BloqueadoHasta { get; set; }
     public DateTime? UltimoLogin { get; set; }
 
-    // Confirmación
-    public bool CorreoConfirmado { get; set; }
-    public string? TokenConfirmacionCorreo { get; set; }
-
-    // Auditoría
-    public bool Activo { get; set; }
-    public DateTime FechaCreacion { get; set; }
+    // --- AUDITORÍA ---
+    public bool Activo { get; set; } = true;
+    public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     public DateTime? FechaActualizacion { get; set; }
+
+    // --- RELACIONES ---
     public int RoleId { get; set; }
     public virtual Role Role { get; set; } = null!;
+
+    // La colección para manejar múltiples dispositivos (Sesiones Remotas)
+    public virtual ICollection<UsuarioSesion> Sesiones { get; set; } = new List<UsuarioSesion>();
 }

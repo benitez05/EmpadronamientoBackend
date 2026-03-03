@@ -1,18 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using BenitezLabs.Persistence;
-using BenitezLabs.Domain.Entities;
 using BenitezLabs.API.Authorization;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.Mappers;
+using EmpadronamientoBackend.Infrastructure.Persistence;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
-/// <summary>
-/// Controlador para la gestión del catálogo de módulos del sistema.
-/// </summary>
 [Route("api/[controller]")]
+[ApiController]
 public class ModulosController : BaseController
 {
     private readonly ApplicationDbContext _context;
@@ -22,40 +19,32 @@ public class ModulosController : BaseController
         _context = context;
     }
 
-    /// <summary>
-    /// Obtiene la lista de todos los módulos registrados con paginación.
-    /// </summary>
-    /// <param name="pagination">Parámetros de paginación (PageNumber, PageSize).</param>
-    /// <response code="200">Lista de módulos devuelta con éxito.</response>
     [HttpGet]
     [AuthLvl("m", 1)]
+    [EndpointSummary("Listado de módulos")]
+    [EndpointDescription("Obtiene todos los módulos del sistema. Útil para cargar menús dinámicos o selectores de permisos.")]
     [ProducesResponseType(typeof(PagedResponse<ModuloResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] PaginationParams pagination)
     {
-        // 1. IQueryable para construcción de la consulta
         var query = _context.Modulos.AsQueryable();
 
-        // 2. Conteo total de módulos en el sistema
         var totalRecords = await query.CountAsync();
 
-        // 3. Ordenamiento por nombre y aplicación de paginación
         var modulos = await query
             .OrderBy(m => m.Nombre)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        // 4. Mapeo a DTO y respuesta usando el estándar Paged del BaseController
         return Paged(modulos.ToResponseList(), pagination, totalRecords, "Módulos recuperados exitosamente.");
     }
 
-    /// <summary>
-    /// Crea un nuevo módulo en el sistema.
-    /// </summary>
-    /// <param name="request">Datos del módulo (Nombre y K).</param>
     [HttpPost]
     [AuthLvl("m", 2)]
+    [EndpointSummary("Registrar nuevo módulo")]
+    [EndpointDescription("Crea una nueva sección en el catálogo. La clave 'K' debe ser única y corta (ej. 'u' para usuarios).")]
     [ProducesResponseType(typeof(ApiResponse<ModuloResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] ModuloRequest request)
     {
         if (await _context.Modulos.AnyAsync(m => m.K == request.K))
@@ -64,20 +53,16 @@ public class ModulosController : BaseController
         }
 
         var nuevoModulo = request.ToEntity();
-
         _context.Modulos.Add(nuevoModulo);
         await _context.SaveChangesAsync();
 
         return Result(nuevoModulo.ToResponse(), "Módulo creado correctamente.");
     }
 
-    /// <summary>
-    /// Actualiza un módulo existente.
-    /// </summary>
-    /// <param name="id">ID del módulo a editar.</param>
-    /// <param name="request">Nuevos datos del módulo.</param>
     [HttpPut("{id}")]
     [AuthLvl("m", 2)]
+    [EndpointSummary("Editar módulo")]
+    [EndpointDescription("Actualiza el nombre o la clave identificadora de un módulo existente.")]
     [ProducesResponseType(typeof(ApiResponse<ModuloResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(int id, [FromBody] ModuloRequest request)
     {
@@ -96,12 +81,10 @@ public class ModulosController : BaseController
         return Result(modulo.ToResponse(), "Módulo actualizado con éxito.");
     }
 
-    /// <summary>
-    /// Elimina un módulo del catálogo.
-    /// </summary>
-    /// <param name="id">ID del módulo a eliminar.</param>
     [HttpDelete("{id}")]
     [AuthLvl("m", 3)]
+    [EndpointSummary("Eliminar módulo")]
+    [EndpointDescription("Borra un módulo si no tiene permisos asignados a ningún rol. Cuidado: borrar esto puede afectar la navegación del front.")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Delete(int id)
     {

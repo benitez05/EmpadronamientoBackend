@@ -1,43 +1,89 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using BenitezLabs.Persistence;
-using BenitezLabs.Domain.Entities;
 using BenitezLabs.API.Authorization;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Application.Mappers;
 using EmpadronamientoBackend.Application.DTOs.Requests;
+using EmpadronamientoBackend.Application.Interfaces;
+using EmpadronamientoBackend.Infrastructure.Persistence;
+using BenitezLabs.Domain.Entities;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
-/// <summary>
-/// Controlador para la administración central de usuarios y sus estados.
-/// </summary>
 [Route("api/[controller]")]
+[ApiController]
 public class UsuariosController : BaseController
 {
     private readonly ApplicationDbContext _context;
+    private readonly ICacheService _cacheService;
+    private readonly ICurrentUserService _currentUser; // <--- Nuestra nueva estrella
 
-    public UsuariosController(ApplicationDbContext context)
+    public UsuariosController(
+        ApplicationDbContext context, 
+        ICacheService cacheService, 
+        ICurrentUserService currentUser)
     {
         _context = context;
+        _cacheService = cacheService;
+        _currentUser = currentUser;
     }
 
-   /// <summary>
-    /// Obtiene la lista de usuarios con filtros y paginación.
-    /// </summary>
-    /// <param name="filter">Filtros de búsqueda, rol y estado.</param>
-    /// <param name="pagination">Parámetros de paginación (PageNumber, PageSize).</param>
-    [HttpGet]
-    [AuthLvl("u", 1)]
-    public async Task<IActionResult> GetAll(
-        [FromQuery] UsuarioFilterParams filter, 
-        [FromQuery] PaginationParams pagination)
-    {
-        var query = _context.Usuarios
-            .Include(u => u.Role)
-            .AsQueryable();
+    #region GESTIÓN DE SESIONES Y SEGURIDAD (USER ME)
 
-        // --- FILTROS ---
+    [HttpGet("me/sessions")]
+    [AuthLvl("u", 1)]
+    [EndpointSummary("Listar sesiones activas del usuario logueado")]
+    public async Task<IActionResult> GetMySessions()
+    {
+        var userId = int.Parse(_currentUser.UserId!);
+        var currentJti = _currentUser.Jti;
+
+        var sesiones = await _context.UsuarioSesiones
+            .Where(s => s.UsuarioId == userId)
+            .Select(s => new {
+                s.Id,
+                s.DeviceInfo,
+                s.IpAddress,
+                s.FechaCreacion,
+                EsActual = s.Jti == currentJti // Comparamos con el JTI del Token actual
+            })
+            .ToListAsync();
+
+        return Result(sesiones, "Lista de dispositivos vinculados.");
+    }
+
+    [HttpDelete("me/sessions/{id}")]
+    [AuthLvl("u", 1)]
+    [EndpointSummary("Cerrar sesión remota propia")]
+    public async Task<IActionResult> RevokeSession(int id)
+    {
+        var userId = int.Parse(_currentUser.UserId!);
+
+        var sesion = await _context.UsuarioSesiones
+            .FirstOrDefaultAsync(s => s.Id == id && s.UsuarioId == userId);
+
+        if (sesion == null) return Error("Sesión no encontrada.");
+
+        // Invalidar el JTI en el Caché de inmediato usando el JTI de la sesión encontrada
+        await _cacheService.SetAsync($"revoked_{sesion.Jti}", true, TimeSpan.FromHours(2));
+
+        _context.UsuarioSesiones.Remove(sesion);
+        await _context.SaveChangesAsync();
+
+        return Result(true, "Dispositivo desconectado correctamente.");
+    }
+
+    #endregion
+
+    #region ADMINISTRACIÓN DE USUARIOS (CRUD & STATUS)
+
+    [HttpGet]
+    [AuthLvl("u", 4)]
+    [EndpointSummary("Listado de usuarios")]
+    public async Task<IActionResult> GetAll([FromQuery] UsuarioFilterParams filter, [FromQuery] PaginationParams pagination)
+    {
+        var query = _context.Usuarios.Include(u => u.Role).AsQueryable();
+
         if (!string.IsNullOrWhiteSpace(filter.Busqueda))
         {
             var b = filter.Busqueda.ToLower();
@@ -46,29 +92,20 @@ public class UsuariosController : BaseController
                                   || u.Correo.ToLower().Contains(b));
         }
 
-        // ... otros filtros (RoleId, Activo)
-
-        // 1. CONTEO (Antes de ordenar y paginar para que sea más rápido)
         var totalRecords = await query.CountAsync();
 
-        // 2. ORDENAMIENTO (🔥 Los más nuevos primero)
-        // Usamos la fecha de creación que ya tienes en tu BaseEntity
-        query = query.OrderByDescending(u => u.FechaCreacion);
-
-        // 3. PAGINACIÓN
         var usuarios = await query
+            .OrderByDescending(u => u.FechaCreacion)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .ToListAsync();
 
         return Paged(usuarios.ToResponseList(), pagination, totalRecords, "Usuarios recuperados.");
     }
-    /// <summary>
-    /// Obtiene el detalle de un usuario específico por su ID.
-    /// </summary>
+
     [HttpGet("{id}")]
     [AuthLvl("u", 1)]
-    [ProducesResponseType(typeof(ApiResponse<UsuarioResponse>), StatusCodes.Status200OK)]
+    [EndpointSummary("Detalle del usuario")]
     public async Task<IActionResult> GetById(int id)
     {
         var usuario = await _context.Usuarios
@@ -80,14 +117,9 @@ public class UsuariosController : BaseController
         return Result(usuario.ToResponse(), "Detalle del usuario recuperado.");
     }
 
-    /// <summary>
-    /// Cambia el rol de un usuario en el sistema.
-    /// </summary>
-    /// <param name="id">ID del usuario.</param>
-    /// <param name="newRoleId">ID del nuevo rol a asignar.</param>
     [HttpPut("{id}/role")]
-    [AuthLvl("u", 3)] // Nivel 3: Gestión de seguridad de usuarios
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [AuthLvl("u", 3)]
+    [EndpointSummary("Actualizar rol de usuario")]
     public async Task<IActionResult> UpdateRole(int id, [FromBody] int newRoleId)
     {
         var usuario = await _context.Usuarios.FindAsync(id);
@@ -103,20 +135,14 @@ public class UsuariosController : BaseController
         return Result(true, "Rol actualizado correctamente.");
     }
 
-    /// <summary>
-    /// Activa o desactiva a un usuario (Bloqueo de acceso).
-    /// </summary>
-    /// <remarks>
-    /// Un usuario desactivado no podrá iniciar sesión aunque su contraseña sea correcta.
-    /// </remarks>
     [HttpPatch("{id}/status")]
-    [AuthLvl("u", 2)] // Nivel 2: Edición de estados
+    [AuthLvl("u", 2)]
+    [EndpointSummary("Baneo / Activación de cuenta")]
     public async Task<IActionResult> ToggleStatus(int id)
     {
         var usuario = await _context.Usuarios.FindAsync(id);
         if (usuario == null) return Error("Usuario no encontrado.");
 
-        // Invertimos el estado actual
         usuario.Activo = !usuario.Activo;
         usuario.FechaActualizacion = DateTime.UtcNow;
 
@@ -126,15 +152,15 @@ public class UsuariosController : BaseController
         return Result(usuario.Activo, $"El usuario ha sido {estado} correctamente.");
     }
 
-   /// <summary>
-    /// Obtiene un resumen estadístico de los usuarios en una sola consulta.
-    /// </summary>
+    #endregion
+
+    #region REPORTES Y ESTADÍSTICAS
+
     [HttpGet("stats")]
     [AuthLvl("u", 1)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [EndpointSummary("Resumen de estadísticas")]
     public async Task<IActionResult> GetStats()
     {
-        // Una sola consulta agrupada para no castigar a la base de datos
         var stats = await _context.Usuarios
             .GroupBy(_ => 1)
             .Select(g => new
@@ -145,10 +171,10 @@ public class UsuariosController : BaseController
             })
             .FirstOrDefaultAsync();
 
-        // Manejo de caso para tabla vacía
         var data = stats ?? new { Total = 0, Activos = 0, Inactivos = 0 };
 
-        // 🔥 Usamos tu método Result para que el JSON lleve Success = true
         return Result(data, "Estadísticas recuperadas exitosamente.");
     }
+
+    #endregion
 }

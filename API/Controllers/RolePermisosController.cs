@@ -1,18 +1,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using BenitezLabs.Persistence;
-using BenitezLabs.Domain.Entities;
 using BenitezLabs.API.Authorization;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Application.Mappers;
 using EmpadronamientoBackend.Application.DTOs.Requests;
+using EmpadronamientoBackend.Infrastructure.Persistence;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
-/// <summary>
-/// Controlador para la gestión granular de la matriz de permisos.
-/// </summary>
 [Route("api/[controller]")]
+[ApiController] // Importante para que valide automáticamente los modelos
 public class RolePermisosController : BaseController
 {
     private readonly ApplicationDbContext _context;
@@ -22,26 +19,21 @@ public class RolePermisosController : BaseController
         _context = context;
     }
 
-    /// <summary>
-    /// Obtiene la matriz completa de permisos del sistema con paginación.
-    /// </summary>
-    /// <param name="pagination">Parámetros de paginación (PageNumber, PageSize).</param>
     [HttpGet("matrix")]
     [AuthLvl("r", 1)]
+    [EndpointSummary("Consultar matriz de permisos")]
+    [EndpointDescription("Obtiene la relación completa entre Roles y Módulos, detallando qué nivel de acceso tiene cada uno.")]
     [ProducesResponseType(typeof(PagedResponse<PermisoMatrixResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPermissionMatrix([FromQuery] PaginationParams pagination)
     {
-        // 1. IQueryable para construcción de la consulta con sus relaciones
         var query = _context.RolesPermisos
             .Include(rp => rp.Role)
             .Include(rp => rp.Modulo)
             .AsQueryable();
 
-        // 2. Conteo total antes de paginar
         var totalRecords = await query.CountAsync();
 
-        // 3. Aplicación de paginación
-        // Ordenamos por Rol y luego por Módulo para que la matriz sea legible
+        // Ordenamos para que en la UI del Front se vea organizado por grupos
         var matrix = await query
             .OrderBy(rp => rp.Role.Nombre)
             .ThenBy(rp => rp.Modulo.Nombre)
@@ -49,22 +41,21 @@ public class RolePermisosController : BaseController
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        // 4. Mapeo y respuesta estandarizada
         return Paged(matrix.ToMatrixList(), pagination, totalRecords, "Matriz de permisos recuperada.");
     }
 
-    /// <summary>
-    /// Elimina un permiso específico de un rol (Revoca el acceso).
-    /// </summary>
     [HttpDelete]
     [AuthLvl("r", 3)]
+    [EndpointSummary("Revocar acceso a módulo")]
+    [EndpointDescription("Elimina la relación entre un Rol y un Módulo. El rol perderá cualquier tipo de acceso al módulo especificado.")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokePermission([FromQuery] int roleId, [FromQuery] int moduloId)
     {
         var permiso = await _context.RolesPermisos
             .FirstOrDefaultAsync(rp => rp.RoleId == roleId && rp.ModuloId == moduloId);
 
-        if (permiso == null) return Error("El permiso no existe.");
+        if (permiso == null) return Error("El permiso no existe o ya fue revocado.");
 
         _context.RolesPermisos.Remove(permiso);
         await _context.SaveChangesAsync();

@@ -1,18 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using BenitezLabs.Persistence;
 using BenitezLabs.Domain.Entities;
 using BenitezLabs.API.Authorization;
 using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Application.Mappers;
+using EmpadronamientoBackend.Infrastructure.Persistence;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
-/// <summary>
-/// Controlador para la gestión de roles y asignación de permisos modulares.
-/// </summary>
 [Route("api/[controller]")]
+[ApiController]
 public class RolesController : BaseController
 {
     private readonly ApplicationDbContext _context;
@@ -22,41 +20,35 @@ public class RolesController : BaseController
         _context = context;
     }
 
-    /// <summary>
-    /// Obtiene la lista de roles con sus permisos simplificados y paginación.
-    /// </summary>
-    /// <param name="pagination">Parámetros de paginación (PageNumber, PageSize).</param>
     [HttpGet]
     [AuthLvl("r", 1)]
+    [EndpointSummary("Listar roles del sistema")]
+    [EndpointDescription("Obtiene todos los roles registrados, incluyendo sus permisos y módulos asociados de forma simplificada.")]
     [ProducesResponseType(typeof(PagedResponse<RoleResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] PaginationParams pagination)
     {
-        // 1. IQueryable con carga profunda de permisos y módulos
         var query = _context.Roles
             .Include(r => r.Permisos)
                 .ThenInclude(p => p.Modulo)
             .AsQueryable();
 
-        // 2. Conteo total de roles registrados
         var totalRecords = await query.CountAsync();
 
-        // 3. Ordenamiento alfabético y paginación
         var roles = await query
             .OrderBy(r => r.Nombre)
             .Skip((pagination.PageNumber - 1) * pagination.PageSize)
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        // 4. Mapeo a DTO de respuesta usando tu método Paged del BaseController
         return Paged(roles.ToResponseList(), pagination, totalRecords, "Roles recuperados exitosamente.");
     }
 
-    /// <summary>
-    /// Crea un nuevo rol.
-    /// </summary>
     [HttpPost]
     [AuthLvl("r", 2)]
+    [EndpointSummary("Crear nuevo rol")]
+    [EndpointDescription("Registra un nuevo rol en la base de datos. El nombre debe ser único.")]
     [ProducesResponseType(typeof(ApiResponse<RoleResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] RoleRequest request)
     {
         if (await _context.Roles.AnyAsync(r => r.Nombre == request.Nombre))
@@ -71,17 +63,14 @@ public class RolesController : BaseController
         return Result(nuevoRol.ToResponse(), "Rol creado correctamente.");
     }
 
-    /// <summary>
-    /// Asigna o actualiza un permiso específico para un rol y módulo.
-    /// </summary>
-    /// <remarks>
-    /// El nivel debe estar entre 1 y 5.
-    /// </remarks>
     [HttpPost("assign-permission")]
     [AuthLvl("r", 2)]
+    [EndpointSummary("Asignar o actualizar permisos")]
+    [EndpointDescription("Vincula un rol con un módulo y le asigna un nivel de acceso (1-5). Si la relación ya existe, actualiza el nivel.")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> AssignPermission([FromBody] AsignarPermisoRequest request)
     {
+        // Validación de rango de nivel
         if (request.Lvl < 1 || request.Lvl > 5) return Error("El nivel debe estar entre 1 y 5.");
 
         if (!await _context.Roles.AnyAsync(r => r.Id == request.RoleId)) return Error("Rol no encontrado.");
@@ -104,17 +93,18 @@ public class RolesController : BaseController
         return Result(true, "Permiso asignado exitosamente.");
     }
 
-    /// <summary>
-    /// Elimina un rol si no tiene usuarios asociados.
-    /// </summary>
     [HttpDelete("{id}")]
     [AuthLvl("r", 3)]
+    [EndpointSummary("Eliminar un rol")]
+    [EndpointDescription("Borra un rol de la base de datos siempre y cuando no tenga usuarios vinculados a él.")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete(int id)
     {
         var role = await _context.Roles.FindAsync(id);
         if (role == null) return Error("Rol no encontrado.");
 
+        // Regla de integridad de negocio
         if (await _context.Usuarios.AnyAsync(u => u.RoleId == id))
         {
             return Error("No se puede eliminar el rol porque tiene usuarios asociados.");

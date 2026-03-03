@@ -8,16 +8,20 @@ using Microsoft.OpenApi.Any;
 using System.Text;
 using System.Reflection;
 using System.ComponentModel;
+using System.IdentityModel.Tokens.Jwt;
 using EmpadronamientoBackend.API.Filters;
 using EmpadronamientoBackend.Infrastructure.Identity;
+using EmpadronamientoBackend.Infrastructure.Services; // Nuevo para CurrentUserService
 using EmpadronamientoBackend.Application.DTOs.Responses;
+using EmpadronamientoBackend.Infrastructure.Cache;
+using EmpadronamientoBackend.Application.Interfaces;
 
 namespace EmpadronamientoBackend.API.Extensions;
 
 public static class ServiceExtensions
 {
     public static IServiceCollection AddApiTemplate(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration)
     {
         // 1. CONFIGURACIÓN DE CONTROLADORES Y FILTROS
@@ -28,10 +32,10 @@ public static class ServiceExtensions
 
         // 2. CONFIGURACIÓN DE FLUENTVALIDATION
         services.AddValidatorsFromAssembly(typeof(EmpadronamientoBackend.Application.DTOs.Requests.LoginRequest).Assembly);
-        
-        services.AddFluentValidationAutoValidation(config => 
+
+        services.AddFluentValidationAutoValidation(config =>
         {
-            config.DisableDataAnnotationsValidation = true; 
+            config.DisableDataAnnotationsValidation = true;
         });
 
         // 3. CONFIGURACIÓN DE OPENAPI (.NET 9 + SCALAR)
@@ -41,11 +45,10 @@ public static class ServiceExtensions
             // --- TRANSFORMADOR DE DOCUMENTO (SEGURIDAD GLOBAL) ---
             options.AddDocumentTransformer((document, context, cancellationToken) =>
             {
-                document.Info.Title = "BenitezLabs Enterprise API";
+                document.Info.Title = "Empadronamiento API";
                 document.Info.Version = "v1";
-                document.Info.Description = "Template de alto rendimiento con Clean Architecture.";
+                document.Info.Description = "entorno de pruebas sistema de empadronamiento";
 
-                // DEFINICIÓN DEL ESQUEMA DE SEGURIDAD
                 var securityScheme = new OpenApiSecurityScheme
                 {
                     Name = "Authorization",
@@ -59,7 +62,6 @@ public static class ServiceExtensions
                 document.Components ??= new OpenApiComponents();
                 document.Components.SecuritySchemes.Add("Bearer", securityScheme);
 
-                // APLICAR REQUERIMIENTO GLOBAL (Para que Scalar lo inyecte solo)
                 var requirement = new OpenApiSecurityRequirement
                 {
                     {
@@ -76,29 +78,26 @@ public static class ServiceExtensions
                 };
 
                 document.SecurityRequirements.Add(requirement);
-
                 return Task.CompletedTask;
             });
 
             // --- TRANSFORMADOR DE ESQUEMA (EJEMPLOS [DefaultValue]) ---
             options.AddSchemaTransformer((schema, context, cancellationToken) =>
             {
-                if (context.JsonTypeInfo.Type == null || schema.Properties == null) 
+                if (context.JsonTypeInfo.Type == null || schema.Properties == null)
                     return Task.CompletedTask;
 
                 var type = context.JsonTypeInfo.Type;
 
                 foreach (var property in schema.Properties)
                 {
-                    // Buscamos el atributo [DefaultValue] en la clase C#
-                    var propInfo = type.GetProperty(property.Key, 
+                    var propInfo = type.GetProperty(property.Key,
                         BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                    
+
                     var defaultAttr = propInfo?.GetCustomAttribute<DefaultValueAttribute>();
 
                     if (defaultAttr != null)
                     {
-                        // Inyectamos el valor al ejemplo que lee Scalar
                         property.Value.Example = new OpenApiString(defaultAttr.Value?.ToString());
                     }
                 }
@@ -112,40 +111,60 @@ public static class ServiceExtensions
             options.SuppressModelStateInvalidFilter = true;
         });
 
-        // 5. SERVICIOS DE IDENTIDAD Y SEGURIDAD
-        services.AddScoped<PasswordService>();
+        // 5. SERVICIOS DE IDENTIDAD, CACHE Y CONTEXTO (LO NUEVO)
+        services.AddScoped<IPasswordService, PasswordService>(); 
+        
+        // Habilita el acceso al HttpContext (Necesario para CurrentUserService)
+        services.AddHttpContextAccessor(); 
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+        services.AddMemoryCache(); 
+        services.AddSingleton<ICacheService, MemoryCacheService>();
 
         // 6. AUTENTICACIÓN JWT
         var jwtKey = configuration["Jwt:Key"] ?? "ClaveTemporalDeSeguridadBenitezLabs2026";
-        
+
         services.AddAuthentication(options =>
         {
             options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
             options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
         })
         .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
             {
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidIssuer = configuration["Jwt:Issuer"],
-                    ValidAudience = configuration["Jwt:Audience"],
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-                };
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = configuration["Jwt:Issuer"],
+                ValidAudience = configuration["Jwt:Audience"],
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
 
-                // 🔥 METE ESTO AQUÍ ABAJO:
-                options.Events = new JwtBearerEvents
+                RoleClaimType = "role",
+                NameClaimType = JwtRegisteredClaimNames.Sub
+            };
+
+            options.Events = new JwtBearerEvents
             {
+                // Validación de sesión activa (Logout real)
+                OnTokenValidated = async context =>
+                {
+                    var cache = context.HttpContext.RequestServices.GetRequiredService<ICacheService>();
+                    var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+                    if (string.IsNullOrEmpty(jti) || await cache.GetAsync<bool?>($"revoked_{jti}") == true)
+                    {
+                        context.Fail("Este token ha sido revocado.");
+                    }
+                },
+
                 OnChallenge = async context =>
                 {
                     context.HandleResponse();
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     context.Response.ContentType = "application/json";
 
-                    // Usamos tu Factory con tipo 'object' porque no hay Data
                     var response = ApiResponseFactory.Fail<object>(
                         "No estás autorizado. El token es inválido o expiró.",
                         code: "AUTH_401"
@@ -158,26 +177,25 @@ public static class ServiceExtensions
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     context.Response.ContentType = "application/json";
 
-                      var modulo = context.HttpContext.Items["AuthError_Key"]?.ToString() ?? "desconocido";
-                      var nivelRequerido = context.HttpContext.Items["AuthError_Level"]?.ToString() ?? "0";
+                    var modulo = context.HttpContext.Items["AuthError_Key"]?.ToString() ?? "desconocido";
+                    var nivelRequerido = context.HttpContext.Items["AuthError_Level"]?.ToString() ?? "0";
 
-                      string desc = nivelRequerido switch
-                      {
-                          "1" => "Lectura",
-                          "2" => "Escritura",
-                          "3" => "Eliminación",
-                          "4" or "5" => "Permiso Especial / Auditoría", 
-                          _ => "Acceso Restringido"
-                      };
+                    string desc = nivelRequerido switch
+                    {
+                        "1" => "Lectura",
+                        "2" => "Escritura",
+                        "3" => "Eliminación",
+                        "4" or "5" => "Permiso Especial / Auditoría",
+                        _ => "Acceso Restringido"
+                    };
 
-                      var mensaje = $"Acceso denegado. Requieres nivel {nivelRequerido} ({desc}) en el módulo '{modulo}'.";
+                    var mensaje = $"Acceso denegado. Requieres nivel {nivelRequerido} ({desc}) en el módulo '{modulo}'.";
+                    var response = ApiResponseFactory.Fail<object>(mensaje, code: "AUTH_403");
 
-                      var response = ApiResponseFactory.Fail<object>(mensaje, code: "AUTH_403");
-
-                      await context.Response.WriteAsJsonAsync(response);
+                    await context.Response.WriteAsJsonAsync(response);
                 }
             };
-            });
+        });
 
         services.AddAuthorization();
 

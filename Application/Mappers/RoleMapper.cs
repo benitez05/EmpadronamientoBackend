@@ -14,8 +14,6 @@ public static class RoleMapper
         {
             Id = r.Id,
             Nombre = r.Nombre,
-            // Usamos el ToResponse de ModuloMapper para la lista anidada
-            Permisos = r.Permisos?.Select(p => p.Modulo.ToResponse()).ToList() ?? new()
         };
     }
 

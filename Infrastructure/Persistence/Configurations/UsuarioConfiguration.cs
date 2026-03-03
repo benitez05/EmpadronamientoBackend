@@ -1,24 +1,18 @@
-using BenitezLabs.Domain.Entities; // Ajusta a tu namespace real
+using BenitezLabs.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace BenitezLabs.Persistence.Configurations;
+namespace EmpadronamientoBackend.Infrastructure.Persistence.Configurations;
 
-/// <summary>
-/// Configuración de la entidad Usuario usando Fluent API.
-/// Separa las reglas de persistencia de la lógica de dominio.
-/// </summary>
 public class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
 {
     public void Configure(EntityTypeBuilder<Usuario> builder)
     {
-        // 1. Nombre de la tabla
         builder.ToTable("Usuarios");
 
-        // 2. Llave Primaria
         builder.HasKey(u => u.Id);
 
-        // 3. Propiedades Básicas
+        // --- Datos Personales ---
         builder.Property(u => u.Nombre)
             .IsRequired()
             .HasMaxLength(50);
@@ -31,7 +25,6 @@ public class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
             .IsRequired()
             .HasMaxLength(150);
 
-        // Índice único para el correo (No queremos duplicados, pendejín)
         builder.HasIndex(u => u.Correo)
             .IsUnique();
 
@@ -42,17 +35,11 @@ public class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
             .HasMaxLength(20);
 
         builder.Property(u => u.Imagen)
-            .HasMaxLength(500); // URL de la imagen
-
-        // 4. Configuración de Roles (Relación 1:N)
-        builder.HasOne(u => u.Role)
-            .WithMany(r => r.Usuarios)
-            .HasForeignKey(u => u.RoleId)
-            .OnDelete(DeleteBehavior.Restrict); // No borres el Rol si tiene usuarios
-
-        // 5. Seguridad (Tokens y Bloqueos)
-        builder.Property(u => u.RefreshToken)
             .HasMaxLength(500);
+
+        // --- Confirmación y Seguridad ---
+        builder.Property(u => u.CorreoConfirmado)
+            .HasDefaultValue(false);
 
         builder.Property(u => u.TokenConfirmacionCorreo)
             .HasMaxLength(250);
@@ -60,14 +47,23 @@ public class UsuarioConfiguration : IEntityTypeConfiguration<Usuario>
         builder.Property(u => u.IntentosFallidos)
             .HasDefaultValue(0);
 
-        // 6. Auditoría y Fechas
+        // --- Auditoría ---
         builder.Property(u => u.Activo)
             .HasDefaultValue(true);
 
         builder.Property(u => u.FechaCreacion)
-            .HasDefaultValueSql("CURRENT_TIMESTAMP(6)"); // Depende de tu BD (MySQL/Postgres)
+            .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
 
-        builder.Property(u => u.FechaActualizacion)
-            .IsRequired(false);
+        // --- Relaciones ---
+        
+        // Relación con Roles (Ya la tenías)
+        builder.HasOne(u => u.Role)
+            .WithMany(r => r.Usuarios)
+            .HasForeignKey(u => u.RoleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // NOTA: No es obligatorio configurar la relación con UsuarioSesiones aquí 
+        // porque ya la configuramos en 'UsuarioSesionConfiguration'. 
+        // EF Core es inteligente y entiende la relación bidireccional.
     }
 }

@@ -1,38 +1,42 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using EmpadronamientoBackend.Infrastructure.Identity;
 using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Application.Mappers;
+using EmpadronamientoBackend.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
-using System.Security.Claims;
-using BenitezLabs.Persistence;
+using System.IdentityModel.Tokens.Jwt;
+using EmpadronamientoBackend.Infrastructure.Persistence;
 using BenitezLabs.Domain.Entities;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
-/// <summary>
-/// Controlador encargado de la autenticación y gestión de usuarios.
-/// </summary>
 [Route("api/[controller]")]
+[ApiController]
 public class AuthController : BaseController
 {
     private readonly ApplicationDbContext _context;
-    private readonly PasswordService _passwordService;
+    private readonly IPasswordService _passwordService;
+    private readonly ICacheService _cacheService;
+    private readonly ICurrentUserService _currentUser;
 
-    public AuthController(ApplicationDbContext context, PasswordService passwordService)
+    public AuthController(
+        ApplicationDbContext context, 
+        IPasswordService passwordService, 
+        ICacheService cacheService,
+        ICurrentUserService currentUser)
     {
         _context = context;
         _passwordService = passwordService;
+        _cacheService = cacheService;
+        _currentUser = currentUser;
     }
 
-    /// <summary>
-    /// Registra un nuevo usuario en la plataforma.
-    /// </summary>
-    /// <param name="request">Datos del registro.</param>
+    #region REGISTRO Y LOGIN
+
     [HttpPost("register")]
-    [ProducesResponseType(typeof(ApiResponse<UsuarioResponse>), StatusCodes.Status200OK)]
+    [EndpointSummary("Registro de nuevos usuarios")]
+    [EndpointDescription("Crea una cuenta nueva. Por defecto asigna el Rol de 'Usuario' (ID: 2).")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         if (await _context.Usuarios.AnyAsync(u => u.Correo == request.Correo))
@@ -41,8 +45,8 @@ public class AuthController : BaseController
         }
 
         var user = request.ToEntity();
-        user.PasswordHash = _passwordService.HashPassword(null!, request.Password);
-        user.RoleId = 2; // Rol por defecto: Usuario
+        user.PasswordHash = _passwordService.HashPassword(user, request.Password);
+        user.RoleId = 2;
 
         _context.Usuarios.Add(user);
         await _context.SaveChangesAsync();
@@ -50,84 +54,120 @@ public class AuthController : BaseController
         return Result(user.ToResponse(), "Tu cuenta ha sido creada exitosamente.");
     }
 
-    /// <summary>
-    /// Inicia sesión y obtiene tokens de acceso.
-    /// </summary>
-    /// <param name="request">Credenciales de acceso.</param>
     [HttpPost("login")]
-    [ProducesResponseType(typeof(ApiResponse<LoginResponse>), StatusCodes.Status200OK)]
+    [EndpointSummary("Inicio de sesión")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var user = await _context.Usuarios
             .Include(u => u.Role)
+                .ThenInclude(r => r.Permisos)
+                    .ThenInclude(p => p.Modulo)
             .SingleOrDefaultAsync(u => u.Correo == request.Correo);
 
-        if (user == null || _passwordService.VerifyPassword(user, request.Password) == PasswordVerificationResult.Failed)
+        if (user == null || !_passwordService.IsValidPassword(user, request.Password))
         {
             return Error("El correo o la contraseña son incorrectos.");
         }
 
-        var token = _passwordService.GenerateJwtToken(user);
+        var tokenData = _passwordService.GenerateJwtToken(user);
         var refreshToken = _passwordService.GenerateRefreshToken();
 
-        user.RefreshToken = refreshToken;
-        user.RefreshTokenExpiration = DateTime.UtcNow.AddDays(30);
-        user.UltimoLogin = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync();
-
-        var response = new LoginResponse
+        var nuevaSesion = new UsuarioSesion
         {
-            Token = token,
+            UsuarioId = user.Id,
+            Jti = tokenData.Jti,
             RefreshToken = refreshToken,
-            Usuario = user.ToResponse()
+            DeviceInfo = Request.Headers["User-Agent"].ToString(),
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown",
+            FechaExpiracion = DateTime.UtcNow.AddDays(30)
         };
 
-        return Result(response, "Ha iniciado sesión correctamente.");
+        _context.UsuarioSesiones.Add(nuevaSesion);
+        user.UltimoLogin = DateTime.UtcNow;
+        
+        await _context.SaveChangesAsync();
+
+        return Result(new LoginResponse
+        {
+            Token = tokenData.Token,
+            RefreshToken = refreshToken,
+            Usuario = user.ToResponse()
+        }, "Ha iniciado sesión correctamente.");
     }
 
-    /// <summary>
-    /// Renueva el Token JWT usando un Refresh Token válido.
-    /// </summary>
+    #endregion
+
+    #region GESTIÓN DE TOKENS (REFRESH & LOGOUT)
+
     [HttpPost("refresh-token")]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [EndpointSummary("Renovar Access Token")]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
     {
-        var user = await _context.Usuarios.SingleOrDefaultAsync(u => u.Correo == request.Correo);
+        var sesion = await _context.UsuarioSesiones
+            .Include(s => s.Usuario)
+                .ThenInclude(u => u.Role)
+                    .ThenInclude(r => r.Permisos)
+                        .ThenInclude(p => p.Modulo)
+            .SingleOrDefaultAsync(s => s.RefreshToken == request.RefreshToken);
 
-        if (user == null || user.RefreshToken != request.RefreshToken || user.RefreshTokenExpiration < DateTime.UtcNow)
+        if (sesion == null || sesion.FechaExpiracion < DateTime.UtcNow)
         {
             return Error("El token de refresco es inválido o ha expirado.");
         }
 
-        var token = _passwordService.GenerateJwtToken(user);
+        var tokenData = _passwordService.GenerateJwtToken(sesion.Usuario);
         var newRefreshToken = _passwordService.GenerateRefreshToken();
 
-        user.RefreshToken = newRefreshToken;
-        user.RefreshTokenExpiration = DateTime.UtcNow.AddDays(30);
+        sesion.RefreshToken = newRefreshToken;
+        sesion.Jti = tokenData.Jti;
+        sesion.FechaExpiracion = DateTime.UtcNow.AddDays(30);
 
         await _context.SaveChangesAsync();
 
-        return Result(new { Token = token, RefreshToken = newRefreshToken }, "Token renovado exitosamente.");
+        return Result(new { Token = tokenData.Token, RefreshToken = newRefreshToken }, "Token renovado exitosamente.");
     }
 
-    /// <summary>
-    /// Actualiza la contraseña del usuario autenticado.
-    /// </summary>
+    [Authorize]
+    [HttpPost("logout")]
+    [EndpointSummary("Cerrar sesión actual")]
+    public async Task<IActionResult> Logout()
+    {
+        var jti = _currentUser.Jti; // Uso directo del servicio
+        
+        if (string.IsNullOrEmpty(jti)) return Error("Sesión no identificada.");
+
+        await _cacheService.SetAsync($"revoked_{jti}", true, TimeSpan.FromHours(1));
+
+        var sesion = await _context.UsuarioSesiones.FirstOrDefaultAsync(s => s.Jti == jti);
+        if (sesion != null)
+        {
+            _context.UsuarioSesiones.Remove(sesion);
+            await _context.SaveChangesAsync();
+        }
+
+        return Result(true, "Has cerrado sesión correctamente.");
+    }
+
+    #endregion
+
+    #region SEGURIDAD DE CUENTA
+
     [Authorize]
     [HttpPut("update-password")]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [EndpointSummary("Cambiar contraseña")]
     public async Task<IActionResult> UpdatePassword([FromBody] UpdatePasswordRequest request)
     {
-        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId)) return Error("No se pudo identificar al usuario.");
+        var userId = _currentUser.UserId; // Uso directo del servicio
+        if (string.IsNullOrEmpty(userId)) return Error("Usuario no identificado.");
 
-        var user = await _context.Usuarios.FindAsync(userId);
+        var user = await _context.Usuarios.FindAsync(int.Parse(userId));
         if (user == null) return Error("Usuario no encontrado.");
 
         user.PasswordHash = _passwordService.HashPassword(user, request.NewPassword);
         await _context.SaveChangesAsync();
 
-        return Result((object)null!, "Tu contraseña ha sido actualizada con éxito.");
+        return Result(true, "Tu contraseña ha sido actualizada con éxito.");
     }
+
+    #endregion
 }
