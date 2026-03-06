@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authorization;
 using System.IdentityModel.Tokens.Jwt;
 using EmpadronamientoBackend.Infrastructure.Persistence;
 using BenitezLabs.Domain.Entities;
+using EmpadronamientoBackend.Infrastructure.Services;
+using BenitezLabs.API.Authorization;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
@@ -21,8 +23,8 @@ public class AuthController : BaseController
     private readonly ICurrentUserService _currentUser;
 
     public AuthController(
-        ApplicationDbContext context, 
-        IPasswordService passwordService, 
+        ApplicationDbContext context,
+        IPasswordService passwordService,
         ICacheService cacheService,
         ICurrentUserService currentUser)
     {
@@ -34,47 +36,161 @@ public class AuthController : BaseController
 
     #region REGISTRO Y LOGIN
 
-    [HttpPost("register")]
-    [EndpointSummary("Registro de nuevos usuarios")]
-    [EndpointDescription("Crea una cuenta nueva. Por defecto asigna el Rol de 'Usuario' (ID: 2).")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    [AuthLvl("u", 2)]
+    [HttpPost("registrar-usuario")]
+    public async Task<IActionResult> RegisterStaff([FromBody] RegisterRequest request)
     {
-        if (await _context.Usuarios.AnyAsync(u => u.Correo == request.Correo))
-        {
+        // 1. Verificación de duplicados
+        if (await _context.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Correo == request.Correo))
             return Error("Ya existe una cuenta asociada a este correo electrónico.");
-        }
 
+        var orgId = _currentUser.OrganizacionId ?? 0;
+        if (orgId == 0) return Error("No se pudo determinar tu organización.");
+
+        // 2. VALIDACIÓN DEL ROL: ¿Existe y pertenece a mi empresa?
+        var rolExiste = await _context.Roles
+            .AnyAsync(r => r.Id == request.RoleId && r.OrganizacionId == orgId);
+
+        if (!rolExiste)
+            return Error("El rol seleccionado no es válido.");
+
+        // 3. Creación
         var user = request.ToEntity();
         user.PasswordHash = _passwordService.HashPassword(user, request.Password);
-        user.RoleId = 2;
+        user.OrganizacionId = orgId;
+        user.RoleId = request.RoleId; // Usamos el ID del request
+        user.Tipo = 1;
 
         _context.Usuarios.Add(user);
         await _context.SaveChangesAsync();
 
-        return Result(user.ToResponse(), "Tu cuenta ha sido creada exitosamente.");
+        return Result(user.ToResponse(), "Usuario registrado exitosamente.");
+    }
+
+    [AuthLvl("u", 3)] // Solo nivel 3 o superior (Staff/Dev)
+    [HttpPost("register-external-admin")]
+    [EndpointSummary("Registro de administradores externos")]
+    public async Task<IActionResult> RegisterExternalAdmin([FromBody] RegisterExternalAdminRequest request)
+    {
+        // EL CANDADO: Solo niveles 3 y 4 (Staff de BenitezLabs) pueden crear otros admins
+        if (_currentUser.Tipo < 3)
+        {
+            return Error("No tienes nivel suficiente para registrar administradores externos.");
+        }
+
+        // 1. Validar Configuración Global Dinámica
+        var config = await _context.ConfiguracionesGlobales.AsNoTracking().FirstOrDefaultAsync();
+        if (config == null) return Error("Configuración global no encontrada.");
+
+        // Validar privilegio de Organización Maestra
+        bool esMaestra = _currentUser.OrganizacionId == config.OrganizacionMaestraId;
+        if (!esMaestra)
+        {
+            return Error("Acceso denegado: tu organización no tiene privilegios de administración global.");
+        }
+
+        // 2. Validar que la organización destino exista
+        if (!await _context.Organizaciones.AnyAsync(o => o.Id == request.TargetOrganizacionId))
+        {
+            return Error("La organización destino no existe.");
+        }
+
+        // --- LA NUEVA VALIDACIÓN CRUCIAL ---
+        // 3. Validar que el ROL pertenezca a la organización destino
+        var rolValido = await _context.Roles
+            .AnyAsync(r => r.Id == request.RoleId && r.OrganizacionId == request.TargetOrganizacionId);
+
+        if (!rolValido)
+        {
+            return Error($"El Rol ID {request.RoleId} no pertenece a la organización destino ({request.TargetOrganizacionId}).");
+        }
+
+        // 4. Verificación global de duplicados
+        if (await _context.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Correo == request.Correo))
+        {
+            return Error("El correo ya está registrado en el sistema.");
+        }
+
+        // 5. Creación del Admin Externo (Tipo 2)
+        var user = request.ToEntity();
+        user.PasswordHash = _passwordService.HashPassword(user, request.Password);
+        user.OrganizacionId = request.TargetOrganizacionId;
+        user.RoleId = request.RoleId; // ID validado dinámicamente
+        user.Tipo = 2; // Administrador de su propia empresa
+
+        _context.Usuarios.Add(user);
+        await _context.SaveChangesAsync();
+
+        return Result(user.ToResponse(), $"Administrador creado exitosamente para la organización {request.TargetOrganizacionId}.");
     }
 
     [HttpPost("login")]
     [EndpointSummary("Inicio de sesión")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
+        // 1. Buscamos el usuario con toda la jerarquía
         var user = await _context.Usuarios
+            .IgnoreQueryFilters()
+            .Include(u => u.Organizacion)
+                .ThenInclude(o => o.ModulosContratados)
+                    .ThenInclude(om => om.Modulo) // Importante para obtener la 'K'
             .Include(u => u.Role)
                 .ThenInclude(r => r.Permisos)
                     .ThenInclude(p => p.Modulo)
             .SingleOrDefaultAsync(u => u.Correo == request.Correo);
 
         if (user == null || !_passwordService.IsValidPassword(user, request.Password))
-        {
             return Error("El correo o la contraseña son incorrectos.");
+
+        if (!user.Activo) return Error("Tu cuenta de usuario está desactivada.");
+
+        // 2. Validaciones de Organización (Bypass Tipo 4)
+        if (user.Tipo != 4)
+        {
+            if (user.Organizacion == null || !user.Organizacion.Activa)
+                return Error("Tu organización está desactivada o suspendida.");
+
+            if (user.Organizacion.FechaVencimiento < DateTime.UtcNow)
+                return Error("El contrato de tu organización ha vencido.");
         }
 
+        // 3. LÓGICA DE PERMISOS DINÁMICA
+        Dictionary<string, int> permisosDict;
+
+        // Obtener módulos activos de la organización
+        var modulosContratados = user.Organizacion?.ModulosContratados?
+            .Where(om => om.Activo && om.Modulo != null)
+            .Select(om => om.Modulo)
+            .ToList() ?? new List<Modulo>();
+
+        if (user.Tipo >= 2)
+        {
+            // BYPASS PARA ADMINS (2, 3 y 4): Nivel 3 en todo lo contratado
+            // Si es Tipo 4, le damos acceso a TODO el catálogo global de módulos
+            var modulosVisibles = user.Tipo == 4
+                ? await _context.Modulos.ToListAsync()
+                : modulosContratados;
+
+            permisosDict = modulosVisibles.ToDictionary(m => m.K, _ => 3);
+        }
+        else
+        {
+            // TIPO 1: Solo lo que diga su Rol, limitado a lo que la empresa pagó
+            var contratadosIds = modulosContratados.Select(m => m.Id).ToList();
+            permisosDict = user.Role?.Permisos?
+                .Where(p => p.Modulo != null && contratadosIds.Contains(p.ModuloId))
+                .ToDictionary(p => p.Modulo.K, p => p.Lvl)
+                ?? new Dictionary<string, int>();
+        }
+
+        // 4. Generación de Tokens y Sesión
         var tokenData = _passwordService.GenerateJwtToken(user);
         var refreshToken = _passwordService.GenerateRefreshToken();
 
         var nuevaSesion = new UsuarioSesion
         {
             UsuarioId = user.Id,
+            OrganizacionId = user.OrganizacionId,
             Jti = tokenData.Jti,
             RefreshToken = refreshToken,
             DeviceInfo = Request.Headers["User-Agent"].ToString(),
@@ -84,26 +200,27 @@ public class AuthController : BaseController
 
         _context.UsuarioSesiones.Add(nuevaSesion);
         user.UltimoLogin = DateTime.UtcNow;
-        
         await _context.SaveChangesAsync();
 
         return Result(new LoginResponse
         {
             Token = tokenData.Token,
             RefreshToken = refreshToken,
-            Usuario = user.ToResponse()
+            Usuario = user.ToResponse(),
+            Permisos = permisosDict
         }, "Ha iniciado sesión correctamente.");
     }
-
-    #endregion
-
-    #region GESTIÓN DE TOKENS (REFRESH & LOGOUT)
 
     [HttpPost("refresh-token")]
     [EndpointSummary("Renovar Access Token")]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
     {
         var sesion = await _context.UsuarioSesiones
+            .IgnoreQueryFilters()
+            .Include(s => s.Usuario)
+                .ThenInclude(u => u.Organizacion)
+                    .ThenInclude(o => o.ModulosContratados)
+                        .ThenInclude(om => om.Modulo)
             .Include(s => s.Usuario)
                 .ThenInclude(u => u.Role)
                     .ThenInclude(r => r.Permisos)
@@ -111,20 +228,56 @@ public class AuthController : BaseController
             .SingleOrDefaultAsync(s => s.RefreshToken == request.RefreshToken);
 
         if (sesion == null || sesion.FechaExpiracion < DateTime.UtcNow)
+            return Error("La sesión ha expirado o el token es inválido.");
+
+        var user = sesion.Usuario;
+        if (!user.Activo) return Error("Cuenta desactivada.");
+
+        if (user.Tipo != 4)
         {
-            return Error("El token de refresco es inválido o ha expirado.");
+            if (user.Organizacion == null || !user.Organizacion.Activa || user.Organizacion.FechaVencimiento < DateTime.UtcNow)
+                return Error("Acceso denegado por estado de la organización.");
         }
 
-        var tokenData = _passwordService.GenerateJwtToken(sesion.Usuario);
+        // RE-CALCULAR PERMISOS (Misma lógica que el Login)
+        Dictionary<string, int> permisosDict;
+        var modulosContratados = user.Organizacion?.ModulosContratados?
+            .Where(om => om.Activo && om.Modulo != null)
+            .Select(om => om.Modulo)
+            .ToList() ?? new List<Modulo>();
+
+        if (user.Tipo >= 2)
+        {
+            var modulosVisibles = user.Tipo == 4
+                ? await _context.Modulos.ToListAsync()
+                : modulosContratados;
+            permisosDict = modulosVisibles.ToDictionary(m => m.K, _ => 3);
+        }
+        else
+        {
+            var contratadosIds = modulosContratados.Select(m => m.Id).ToList();
+            permisosDict = user.Role?.Permisos?
+                .Where(p => p.Modulo != null && contratadosIds.Contains(p.ModuloId))
+                .ToDictionary(p => p.Modulo.K, p => p.Lvl)
+                ?? new Dictionary<string, int>();
+        }
+
+        var tokenData = _passwordService.GenerateJwtToken(user);
         var newRefreshToken = _passwordService.GenerateRefreshToken();
 
         sesion.RefreshToken = newRefreshToken;
         sesion.Jti = tokenData.Jti;
         sesion.FechaExpiracion = DateTime.UtcNow.AddDays(30);
+        sesion.IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
 
         await _context.SaveChangesAsync();
 
-        return Result(new { Token = tokenData.Token, RefreshToken = newRefreshToken }, "Token renovado exitosamente.");
+        return Result(new
+        {
+            Token = tokenData.Token,
+            RefreshToken = newRefreshToken,
+            Permisos = permisosDict
+        }, "Token renovado exitosamente.");
     }
 
     [Authorize]
@@ -133,7 +286,7 @@ public class AuthController : BaseController
     public async Task<IActionResult> Logout()
     {
         var jti = _currentUser.Jti; // Uso directo del servicio
-        
+
         if (string.IsNullOrEmpty(jti)) return Error("Sesión no identificada.");
 
         await _cacheService.SetAsync($"revoked_{jti}", true, TimeSpan.FromHours(1));

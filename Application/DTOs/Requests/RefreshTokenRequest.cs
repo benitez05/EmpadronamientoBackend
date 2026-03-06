@@ -1,14 +1,13 @@
 using System.ComponentModel;
-
-namespace EmpadronamientoBackend.Application.DTOs.Requests;
+using System.ComponentModel.DataAnnotations;
 
 public class RefreshTokenRequest
 {
-    /// <summary>Correo asociado al token</summary>
+    [Required]
     [DefaultValue("admin@benitezlabs.com")]
-    public required string Correo { get; set; }
+    public string Correo { get; set; } = string.Empty;
 
-    /// <summary>Token de refresco obtenido en el Login</summary>
+    [Required]
     [DefaultValue("8x9b2c3d4e5f6g7h8i9j0k1l2m3n4o5pQWERTY")]
-    public required string RefreshToken { get; set; }
+    public string RefreshToken { get; set; } = string.Empty;
 }

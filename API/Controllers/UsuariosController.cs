@@ -16,11 +16,11 @@ public class UsuariosController : BaseController
 {
     private readonly ApplicationDbContext _context;
     private readonly ICacheService _cacheService;
-    private readonly ICurrentUserService _currentUser; // <--- Nuestra nueva estrella
+    private readonly ICurrentUserService _currentUser;
 
     public UsuariosController(
-        ApplicationDbContext context, 
-        ICacheService cacheService, 
+        ApplicationDbContext context,
+        ICacheService cacheService,
         ICurrentUserService currentUser)
     {
         _context = context;
@@ -40,7 +40,8 @@ public class UsuariosController : BaseController
 
         var sesiones = await _context.UsuarioSesiones
             .Where(s => s.UsuarioId == userId)
-            .Select(s => new {
+            .Select(s => new
+            {
                 s.Id,
                 s.DeviceInfo,
                 s.IpAddress,
@@ -50,6 +51,41 @@ public class UsuariosController : BaseController
             .ToListAsync();
 
         return Result(sesiones, "Lista de dispositivos vinculados.");
+    }
+
+    [HttpPut("{id}")]
+    [AuthLvl("u", 2)] // Nivel 2: Edición/Escritura
+    [EndpointSummary("Editar perfil de usuario")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateUsuarioRequest request)
+    {
+        // 1. Buscamos al usuario (El Global Filter ya protege la OrganizacionId)
+        var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
+
+        if (usuario == null)
+            return Error("Usuario no encontrado.");
+
+        // 2. Validación de Rol (Si se intenta cambiar)
+        if (request.RoleId.HasValue && request.RoleId != usuario.RoleId)
+        {
+            // Verificamos que el nuevo rol también pertenezca a la misma organización
+            var rolValido = await _context.Roles.AnyAsync(r => r.Id == request.RoleId);
+            if (!rolValido) return Error("El rol especificado no es válido.");
+
+            usuario.RoleId = request.RoleId.Value;
+        }
+
+        // 3. Mapeo de campos permitidos
+        usuario.Nombre = request.Nombre;
+        usuario.Apellidos = request.Apellidos;
+        usuario.Celular = request.Celular;
+        usuario.Imagen = request.Imagen;
+
+        // 4. Guardado
+        // Tu override de SaveChangesAsync pondrá automáticamente:
+        // ActualizadoPor, FechaUltimaActualizacion, Ip y Dispositivo.
+        await _context.SaveChangesAsync();
+
+        return Result(usuario.ToResponse(), "Los datos del usuario han sido actualizados.");
     }
 
     [HttpDelete("me/sessions/{id}")]
@@ -87,8 +123,8 @@ public class UsuariosController : BaseController
         if (!string.IsNullOrWhiteSpace(filter.Busqueda))
         {
             var b = filter.Busqueda.ToLower();
-            query = query.Where(u => u.Nombre.ToLower().Contains(b) 
-                                  || u.Apellidos.ToLower().Contains(b) 
+            query = query.Where(u => u.Nombre.ToLower().Contains(b)
+                                  || u.Apellidos.ToLower().Contains(b)
                                   || u.Correo.ToLower().Contains(b));
         }
 
@@ -118,63 +154,68 @@ public class UsuariosController : BaseController
     }
 
     [HttpPut("{id}/role")]
-    [AuthLvl("u", 3)]
-    [EndpointSummary("Actualizar rol de usuario")]
-    public async Task<IActionResult> UpdateRole(int id, [FromBody] int newRoleId)
+    [AuthLvl("u", 3)] // Nivel 3 en usuarios para poder cambiar roles
+    [EndpointSummary("Actualizar rol de un usuario")]
+    [EndpointDescription("Cambia el rol de un usuario. Solo se permiten roles que pertenezcan a la misma organización del usuario.")]
+    public async Task<IActionResult> UpdateRole(int id, [FromBody] UpdateRoleRequest request)
     {
-        var usuario = await _context.Usuarios.FindAsync(id);
-        if (usuario == null) return Error("Usuario no encontrado.");
+        // 1. Buscamos al usuario asegurándonos que sea de la misma Org que el admin logueado
+        // (A menos que sea Tipo 4, que tiene bypass)
+        // NOTA: El Global Query Filter ya aplica el filtrado por Org o el bypass de Tipo 4 automáticamente
+        var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
+        if (usuario == null) return Error("Usuario no encontrado o no pertenece a tu organización.");
 
-        if (!await _context.Roles.AnyAsync(r => r.Id == newRoleId))
-            return Error("El rol especificado no existe.");
+        // 2. Validamos que el NUEVO ROL también pertenezca a la misma organización
+        // NOTA: El Global Query Filter también protege la tabla Roles
+        var rolValido = await _context.Roles.AnyAsync(r => r.Id == request.NewRoleId);
 
-        usuario.RoleId = newRoleId;
-        usuario.FechaActualizacion = DateTime.UtcNow;
+        if (!rolValido)
+            return Error("El rol especificado no existe o no pertenece a la organización del usuario.");
 
+        // 3. Actualización
+        usuario.RoleId = request.NewRoleId;
         await _context.SaveChangesAsync();
-        return Result(true, "Rol actualizado correctamente.");
+
+        return Result(true, $"El usuario {usuario.Nombre} ahora tiene un nuevo rol.");
     }
 
+    // DTO pequeño para el Body
+    public record UpdateRoleRequest(int NewRoleId);
+
     [HttpPatch("{id}/status")]
-    [AuthLvl("u", 2)]
+    [AuthLvl("u", 3)] // Nivel 3 para gestionar estados de cuenta
     [EndpointSummary("Baneo / Activación de cuenta")]
+    [EndpointDescription("Alterna el estado activo/inactivo de un usuario. Un administrador no puede desactivar su propia cuenta.")]
     public async Task<IActionResult> ToggleStatus(int id)
     {
-        var usuario = await _context.Usuarios.FindAsync(id);
-        if (usuario == null) return Error("Usuario no encontrado.");
+        // 1. Evitar el "auto-baneo"
+        // Si UserId es string, conviértelo a int
+        if (id == int.Parse(_currentUser.UserId))
+        {
+            return Error("No puedes desactivar tu propia cuenta.");
+        }
 
+        // 2. Búsqueda con filtro de organización (Protección Multi-tenant)
+        // NOTA: El Global Query Filter ya aplica el filtrado por Org o el bypass de Tipo 4 automáticamente
+        var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
+
+        if (usuario == null)
+            return Error("Usuario no encontrado.");
+
+        // 3. Cambio de estado
         usuario.Activo = !usuario.Activo;
-        usuario.FechaActualizacion = DateTime.UtcNow;
 
+        // Al ser Patch y usar SaveChanges, AuditoriaEntidad registrará quién hizo el baneo
         await _context.SaveChangesAsync();
-        
-        string estado = usuario.Activo ? "activado" : "desactivado";
-        return Result(usuario.Activo, $"El usuario ha sido {estado} correctamente.");
+
+        string accion = usuario.Activo ? "activado" : "desactivado";
+        return Result(usuario.Activo, $"El usuario {usuario.Nombre} ha sido {accion} correctamente.");
     }
 
     #endregion
 
     #region REPORTES Y ESTADÍSTICAS
 
-    [HttpGet("stats")]
-    [AuthLvl("u", 1)]
-    [EndpointSummary("Resumen de estadísticas")]
-    public async Task<IActionResult> GetStats()
-    {
-        var stats = await _context.Usuarios
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                Total = g.Count(),
-                Activos = g.Count(u => u.Activo),
-                Inactivos = g.Count(u => !u.Activo)
-            })
-            .FirstOrDefaultAsync();
-
-        var data = stats ?? new { Total = 0, Activos = 0, Inactivos = 0 };
-
-        return Result(data, "Estadísticas recuperadas exitosamente.");
-    }
 
     #endregion
 }

@@ -7,7 +7,6 @@ public class LoginRequestValidator : AbstractValidator<LoginRequest>
 {
     public LoginRequestValidator()
     {
-
         RuleFor(x => x.Correo)
             .NotEmpty().WithMessage("El correo es requerido")
             .EmailAddress().WithMessage("El formato del correo no es válido")
@@ -19,6 +18,8 @@ public class LoginRequestValidator : AbstractValidator<LoginRequest>
             .Matches(@"[A-Z]").WithMessage("Debe contener al menos una mayúscula")
             .Matches(@"[a-z]").WithMessage("Debe contener al menos una minúscula")
             .Matches(@"[0-9]").WithMessage("Debe contener al menos un número")
-            .Matches(@"[\!\?\*\.]").WithMessage("Debe contener al menos un carácter especial (!?*.)");
+            // Explicación de la Regex: [^a-zA-Z0-9] significa "cualquier cosa que NO sea letra o número"
+            // Esto incluye %, $, #, @, !, ?, *, ., etc.
+            .Matches(@"[^a-zA-Z0-9]").WithMessage("Debe contener al menos un carácter especial (ej: !?*.%#@)");
     }
 }

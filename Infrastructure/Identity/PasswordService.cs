@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -23,12 +24,9 @@ public class PasswordService : IPasswordService
     public string HashPassword(Usuario user, string password) =>
         _passwordHasher.HashPassword(user, password);
 
-    // Cambiamos el nombre y el tipo de retorno para cumplir con la interfaz
     public bool IsValidPassword(Usuario user, string password)
     {
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
-
-        // Retornamos true si la contraseña es correcta o si es correcta pero necesita re-hashearse
         return result == PasswordVerificationResult.Success ||
                result == PasswordVerificationResult.SuccessRehashNeeded;
     }
@@ -39,23 +37,33 @@ public class PasswordService : IPasswordService
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var jti = Guid.NewGuid().ToString();
 
-        // 🚀 MEJORA: Generamos un diccionario plano para que sea fácil de leer en el Atributo
+        // Mapeo de permisos para el diccionario
         var permisosDict = user.Role?.Permisos?
             .Where(p => p.Modulo != null)
             .ToDictionary(p => p.Modulo.K, p => p.Lvl)
             ?? new Dictionary<string, int>();
 
         var payload = new JwtPayload
-    {
-        { JwtRegisteredClaimNames.Sub, user.Id.ToString() },
-        { JwtRegisteredClaimNames.Jti, jti },
-        { JwtRegisteredClaimNames.Email, user.Correo },
-        { "role", user.Role?.Nombre ?? "Usuario" },
-        { "permisos", permisosDict }, // Se serializa como: {"u":1, "r":1}
-        { "iss", _configuration["Jwt:Issuer"] },
-        { "aud", _configuration["Jwt:Audience"] },
-        { "exp", (int)DateTimeOffset.UtcNow.AddMinutes(60).ToUnixTimeSeconds() }
-    };
+        {
+            { JwtRegisteredClaimNames.Sub, user.Id.ToString() },
+            { JwtRegisteredClaimNames.Jti, jti },
+            { JwtRegisteredClaimNames.Email, user.Correo },
+            { "role", user.Role?.Nombre ?? "Usuario" },
+            
+            // 1. EL BYPASS: Nivel de seguridad (1, 2 o 3)
+            // Esto es lo que el atributo [AuthLvl] leerá para el Modo Dios
+            { "tipo", user.Tipo.ToString() }, 
+
+            // 2. MULTI-TENANCY: ID de organización
+            { "OrganizacionId", user.OrganizacionId.ToString() }, 
+
+            // 3. PERMISOS: Serializados para que el atributo los pueda leer
+            { "permisos", JsonSerializer.Serialize(permisosDict) }, 
+
+            { "iss", _configuration["Jwt:Issuer"] },
+            { "aud", _configuration["Jwt:Audience"] },
+            { "exp", (int)DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds() }
+        };
 
         var header = new JwtHeader(creds);
         var token = new JwtSecurityToken(header, payload);

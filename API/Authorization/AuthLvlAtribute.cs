@@ -2,15 +2,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using System.Text.Json; // <--- AGREGAR ESTO PARA EL JSON
+using System.Text.Json;
 
 namespace BenitezLabs.API.Authorization;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class AuthLvlAttribute : AuthorizeAttribute, IAuthorizationFilter
 {
-    private readonly string _k; 
-    private readonly int _l;    
+    private readonly string _k;
+    private readonly int _l;
 
     public AuthLvlAttribute(string k, int l)
     {
@@ -29,33 +29,33 @@ public class AuthLvlAttribute : AuthorizeAttribute, IAuthorizationFilter
             return;
         }
 
-        // 2. Bypass para SuperAdmin
-        var userRole = user.FindFirst("role")?.Value ?? user.FindFirst(ClaimTypes.Role)?.Value;
-        if (userRole == "SuperAdmin") return;
+        // 2. BYPASS DEFINITIVO: Validar por el "Tipo" (Nivel de Seguridad)
+        // Buscamos el claim "tipo" que debe ser '3' para el SuperAdmin
+        var tipoClaim = user.FindFirst("tipo")?.Value;
+        if (tipoClaim == "3") return; // ¡MODO DIOS! Acceso total sin leer JSON
 
-        // 3. NUEVA LÓGICA: Buscar el paquete de "permisos"
+        // 3. LÓGICA DE PERMISOS PARA MORTALES:
         var permisosJson = user.FindFirst("permisos")?.Value;
-        
+
         if (!string.IsNullOrEmpty(permisosJson))
         {
             try
             {
-                // Deserializamos el diccionario plano que creamos en el PasswordService
+                // Deserializamos el diccionario { "u": 2, "r": 1 }
                 var permisos = JsonSerializer.Deserialize<Dictionary<string, int>>(permisosJson);
 
-                // Verificamos si existe la llave del módulo (ej: "u") y si el nivel es suficiente
-                if (permisos != null && permisos.TryGetValue(_k, out int userLevel) && userLevel >= _l)
+                if (permisos != null && permisos.TryGetValue(_k, out int userLevel))
                 {
-                    return; // ¡ACCESO CONCEDIDO!
+                    if (userLevel >= _l) return; // ACCESO CONCEDIDO
                 }
             }
             catch
             {
-                // Si el JSON viene mal, denegamos por seguridad
+                // Error en JSON = Denegado
             }
         }
 
-        // 4. Si llegó aquí, no tiene permiso o no se encontró el módulo
+        // 4. Falló todo: No es SuperAdmin y no tiene el permiso requerido
         context.HttpContext.Items["AuthError_Key"] = _k;
         context.HttpContext.Items["AuthError_Level"] = _l;
         context.Result = new ForbidResult();

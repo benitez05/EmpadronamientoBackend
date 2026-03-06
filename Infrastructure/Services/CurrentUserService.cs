@@ -14,8 +14,6 @@ public class CurrentUserService : ICurrentUserService
         _httpContextAccessor = httpContextAccessor;
     }
 
-    // Leemos los claims directamente del contexto de la petición actual
-    // Buscamos tanto en el esquema estándar como en el Jti de OpenId
     public string? UserId => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimTypes.NameIdentifier) 
                              ?? _httpContextAccessor.HttpContext?.User?.FindFirstValue(JwtRegisteredClaimNames.Sub);
 
@@ -24,4 +22,29 @@ public class CurrentUserService : ICurrentUserService
     public string? Jti => _httpContextAccessor.HttpContext?.User?.FindFirstValue(JwtRegisteredClaimNames.Jti);
 
     public bool IsAuthenticated => _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
+
+    // --- EL CAMBIO CRUCIAL PARA EL FILTRO GLOBAL ---
+
+    public int Tipo 
+    {
+        get
+        {
+            // Buscamos el claim "tipo" que metimos en el PasswordService
+            var tipoClaim = _httpContextAccessor.HttpContext?.User?.FindFirstValue("tipo");
+            return int.TryParse(tipoClaim, out var t) ? t : 0; // 0 si no hay token (ej. al migrar)
+        }
+    }
+
+    public int? OrganizacionId 
+    {
+        get
+        {
+            var orgClaim = _httpContextAccessor.HttpContext?.User?.FindFirstValue("OrganizacionId");
+            return int.TryParse(orgClaim, out var id) ? id : null;
+        }
+    }
+
+    public string? IpAddress => _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+
+    public string? Dispositivo => _httpContextAccessor.HttpContext?.Request.Headers["User-Agent"].ToString();
 }

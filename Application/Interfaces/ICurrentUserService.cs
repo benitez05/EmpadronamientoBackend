@@ -4,6 +4,11 @@ public interface ICurrentUserService
 {
     string? UserId { get; }
     string? Email { get; }
-    string? Jti { get; } // Agregamos esto para saber qué folio de sesión trae
+    string? Jti { get; }
     bool IsAuthenticated { get; }
+
+    int Tipo { get; }
+    int? OrganizacionId { get; }
+    string? IpAddress { get; }
+    string? Dispositivo { get; }
 }

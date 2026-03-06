@@ -1,6 +1,8 @@
+using BenitezLabs.Domain.Common;
+
 namespace BenitezLabs.Domain.Entities;
 
-public class Usuario
+public class Usuario : AuditoriaEntidad // <--- Heredamos toda la auditoría pro
 {
     public int Id { get; set; }
 
@@ -12,7 +14,13 @@ public class Usuario
     public string? Celular { get; set; }
     public string? Imagen { get; set; }
 
-    // --- CONFIRMACIÓN (Los que me reclamaste, aquí están de vuelta) ---
+    // Bypass de seguridad: 3 es el Dios del sistema
+    public int Tipo { get; set; } = 1;
+
+    public int OrganizacionId { get; set; }
+    public virtual Organizacion Organizacion { get; set; } = null!;
+
+    // --- CONFIRMACIÓN ---
     public bool CorreoConfirmado { get; set; }
     public string? TokenConfirmacionCorreo { get; set; }
 
@@ -21,10 +29,9 @@ public class Usuario
     public DateTime? BloqueadoHasta { get; set; }
     public DateTime? UltimoLogin { get; set; }
 
-    // --- AUDITORÍA ---
+    // --- ESTADO ---
     public bool Activo { get; set; } = true;
-    public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
-    public DateTime? FechaActualizacion { get; set; }
+    // Quitamos FechaCreacion y FechaActualizacion porque ya vienen en AuditoriaEntidad
 
     // --- RELACIONES ---
     public int RoleId { get; set; }

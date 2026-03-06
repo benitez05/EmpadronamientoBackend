@@ -21,7 +21,8 @@ public static class UsuarioMapper
             Nombre = u.Nombre,
             Apellidos = u.Apellidos,
             Celular = u.Celular,
-            Rol = u.Role?.ToResponse() 
+            Tipo = u.Tipo,
+            Rol = u.Role?.ToResponse() ,
         };
     }
 

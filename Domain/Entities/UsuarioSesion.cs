@@ -19,4 +19,7 @@ public class UsuarioSesion
 
     // Propiedad de navegación
     public virtual Usuario Usuario { get; set; } = null!;
+
+    // El ID denormalizado para el filtro global
+    public int OrganizacionId { get; set; }
 }

@@ -106,19 +106,57 @@ public static class ServiceExtensions
         });
 
         // 4. COMPORTAMIENTO DE API PERSONALIZADO
+        // 4. COMPORTAMIENTO DE API PERSONALIZADO
         services.Configure<ApiBehaviorOptions>(options =>
         {
-            options.SuppressModelStateInvalidFilter = true;
+            // Deshabilitamos el filtro automático para que nuestro ValidationFilter 
+            // o esta fábrica manejen la respuesta.
+            options.SuppressModelStateInvalidFilter = false;
+
+            options.InvalidModelStateResponseFactory = context =>
+            {
+                var errors = context.ModelState
+                    .Where(e => e.Value?.Errors.Count > 0)
+                    .Select(e =>
+                    {
+                        var error = e.Value!.Errors.First();
+                        var mensaje = error.ErrorMessage;
+
+                        // --- MEJORA: Detectar errores de conversión de JSON (como fechas) ---
+                        if (string.IsNullOrEmpty(mensaje) && error.Exception != null)
+                        {
+                            // Si el error es por formato de fecha en fechaVencimiento
+                            if (e.Key.Contains("fechaVencimiento", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return "El formato de 'fechaVencimiento' es inválido. Use ISO 8601 (Ej: 2026-03-06T00:00:00Z).";
+                            }
+
+                            // Error genérico de conversión
+                            return $"Error de formato en el campo '{e.Key}': el valor enviado no es válido.";
+                        }
+
+                        return mensaje;
+                    }).ToList();
+
+                // Usamos tu ApiResponseFactory para mantener la estética de BenitezLabs
+                var response = ApiResponseFactory.Fail<object>(
+                    "Error de validación en la estructura de los datos.",
+                    errors: errors,
+                    code: "VALIDATION_ERROR"
+                );
+
+                return new BadRequestObjectResult(response);
+            };
         });
 
         // 5. SERVICIOS DE IDENTIDAD, CACHE Y CONTEXTO (LO NUEVO)
-        services.AddScoped<IPasswordService, PasswordService>(); 
-        
+        services.AddScoped<IPasswordService, PasswordService>();
+
         // Habilita el acceso al HttpContext (Necesario para CurrentUserService)
-        services.AddHttpContextAccessor(); 
+        services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-        services.AddMemoryCache(); 
+        services.AddMemoryCache();
         services.AddSingleton<ICacheService, MemoryCacheService>();
 
         // 6. AUTENTICACIÓN JWT
