@@ -24,13 +24,14 @@ public class ModulosController : BaseController
 
     [HttpGet]
     [AuthLvl("m", 1)]
-    [EndpointSummary("Listado completo de módulos (sin paginar)")]
+    [EndpointSummary("Listado completo de módulos del sistema")]
     public async Task<IActionResult> GetAll()
     {
         // 1. Obtenemos todos los módulos de la base de datos sin Skip ni Take
         var modulos = await _context.Modulos
-            .OrderBy(m => m.Nombre)
-            .ToListAsync();
+              .IgnoreQueryFilters() // Ignora cualquier filtro global de multi-tenant
+              .OrderBy(m => m.Nombre)
+              .ToListAsync();
 
         // 2. Usamos el método Result heredado de BaseController
         //    Esto devolverá un ApiResponse estándar en lugar de un PagedResponse

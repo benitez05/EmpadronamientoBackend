@@ -22,7 +22,7 @@ public class RolesController : BaseController
 
     [HttpGet]
     [AuthLvl("r", 1)]
-    [EndpointSummary("Listar roles del sistema")]
+    [EndpointSummary("Listar roles ")]
     [EndpointDescription("Obtiene todos los roles registrados, incluyendo sus permisos y módulos asociados de forma simplificada.")]
     [ProducesResponseType(typeof(PagedResponse<RoleResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll([FromQuery] PaginationParams pagination)

@@ -106,8 +106,8 @@ public class OrganizacionesController : BaseController
 
                 // Activar módulos base
                 var modulosBase = await _context.Modulos
-                    .Where(m => m.K == "u" || m.K == "r")
-                    .ToListAsync();
+               .Where(m => m.K == "u" || m.K == "r" || m.K == "o" || m.K == "c") // Usuarios, Roles, Organizaciones, Configuración
+               .ToListAsync();
 
                 foreach (var m in modulosBase)
                 {
@@ -116,7 +116,7 @@ public class OrganizacionesController : BaseController
                         OrganizacionId = nuevaOrg.Id,
                         ModuloId = m.Id,
                         Activo = true,
-                        FechaActivacion = DateTime.UtcNow
+                        FechaActivacion = DateTime.UtcNow,
                     });
                 }
 
@@ -166,7 +166,7 @@ public class OrganizacionesController : BaseController
     }
 
     [HttpPut("{id}")]
-    [AuthLvl("o", 3)]
+    [AuthLvl("o", 2)]
     [EndpointSummary("Editar organización")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<OrganizacionResponse>), StatusCodes.Status200OK)]

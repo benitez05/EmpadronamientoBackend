@@ -9,13 +9,13 @@ public class Organizacion : AuditoriaEntidad
     public string? Descripcion { get; set; }
     
     // --- CONTACTO Y LOCALIZACIÓN ---
-    public string? EmailContacto { get; set; }
+    public string EmailContacto { get; set; }
     public string? Telefono { get; set; }
     public string Calle { get; set; } = string.Empty;
 
     public string NumeroExterior { get; set; } = string.Empty;
 
-    public string NumeroInterior { get; set; } = string.Empty;
+    public string? NumeroInterior { get; set; } = string.Empty;
 
     public int CP { get; set; } 
 

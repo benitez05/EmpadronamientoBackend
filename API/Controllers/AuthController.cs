@@ -98,7 +98,8 @@ public class AuthController : BaseController
         // --- LA NUEVA VALIDACIÓN CRUCIAL ---
         // 3. Validar que el ROL pertenezca a la organización destino
         var rolValido = await _context.Roles
-            .AnyAsync(r => r.Id == request.RoleId && r.OrganizacionId == request.TargetOrganizacionId);
+    .IgnoreQueryFilters()
+    .AnyAsync(r => r.Id == request.RoleId && r.OrganizacionId == request.TargetOrganizacionId);
 
         if (!rolValido)
         {
