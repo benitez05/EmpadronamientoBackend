@@ -10,5 +10,7 @@ public class UsuarioResponse
     public required int Tipo { get; set; }
     public RoleResponse? Rol { get; set; }
 
+    public string? ImagenUrl { get; set; }
+
 
 }

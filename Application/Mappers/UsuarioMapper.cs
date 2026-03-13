@@ -1,30 +1,40 @@
 using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using BenitezLabs.Domain.Entities;
+using EmpadronamientoBackend.Application.Interfaces;
 
 namespace EmpadronamientoBackend.Application.Mappers;
 
 public static class UsuarioMapper
 {
     /// <summary>
-    /// Convierte una entidad Usuario a un DTO de respuesta.
-    /// Incluye el mapeo del Rol asociado.
-    /// </summary>
-    public static UsuarioResponse ToResponse(this Usuario u)
-    {
-        if (u == null) return null!;
+/// Convierte una entidad Usuario a un DTO de respuesta.
+/// Genera automáticamente la URL temporal si hay imagen.
+/// </summary>
+public static UsuarioResponse ToResponse(this Usuario u, IS3Service? s3Service = null)
+{
+    if (u == null) return null!;
 
-        return new UsuarioResponse
-        {
-            Id = u.Id,
-            Correo = u.Correo,
-            Nombre = u.Nombre,
-            Apellidos = u.Apellidos,
-            Celular = u.Celular,
-            Tipo = u.Tipo,
-            Rol = u.Role?.ToResponse() ,
-        };
-    }
+    // Función interna que genera URL temporal si se proporciona el servicio
+    Func<string?, string?> generateUrl = fileName =>
+    {
+        if (string.IsNullOrEmpty(fileName) || s3Service == null)
+            return fileName; // devuelve null o el nombre si no hay servicio
+        return s3Service.GetPreSignedUrl(fileName);
+    };
+
+    return new UsuarioResponse
+    {
+        Id = u.Id,
+        Correo = u.Correo,
+        Nombre = u.Nombre,
+        Apellidos = u.Apellidos,
+        Celular = u.Celular,
+        Tipo = u.Tipo,
+        Rol = u.Role?.ToResponse(),
+        ImagenUrl = generateUrl(u.Imagen) // automáticamente genera la URL si hay imagen
+    };
+}
 
     /// <summary>
     /// Convierte un Request de Registro a una Entidad de Dominio.

@@ -11,9 +11,21 @@ public class Organizacion : AuditoriaEntidad
     // --- CONTACTO Y LOCALIZACIÓN ---
     public string? EmailContacto { get; set; }
     public string? Telefono { get; set; }
-    public string? Direccion { get; set; }
+    public string Calle { get; set; } = string.Empty;
+
+    public string NumeroExterior { get; set; } = string.Empty;
+
+    public string NumeroInterior { get; set; } = string.Empty;
+
+    public int CP { get; set; } 
+
+    public string? Colonia { get; set; }
+
+    public string? Municipio { get; set; }
+
+    public string? Estado { get; set; }
+
     public string? Pais { get; set; }
-    public string? Ciudad { get; set; }
 
     // --- IDENTIDAD VISUAL ---
     public string? LogoUrl { get; set; }

@@ -6,7 +6,7 @@ using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Application.Interfaces;
 using EmpadronamientoBackend.Infrastructure.Persistence;
-using EmpadronamientoBackend.Application.DTOs;
+using EmpadronamientoBackend.Application.Mappers;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
@@ -16,15 +16,17 @@ public class OrganizacionesController : BaseController
 {
     private readonly ApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
+    private readonly IS3Service _s3Service;
 
-    public OrganizacionesController(ApplicationDbContext context, ICurrentUserService currentUser)
+    public OrganizacionesController(
+        ApplicationDbContext context,
+        ICurrentUserService currentUser,
+        IS3Service s3Service)
     {
         _context = context;
         _currentUser = currentUser;
+        _s3Service = s3Service;
     }
-
-    private async Task<int> GetMaestraId() =>
-        (await _context.ConfiguracionesGlobales.AsNoTracking().FirstOrDefaultAsync())?.OrganizacionMaestraId ?? -1;
 
     [HttpGet]
     [AuthLvl("o", 1)]
@@ -32,46 +34,68 @@ public class OrganizacionesController : BaseController
     [ProducesResponseType(typeof(ApiResponse<List<OrganizacionResponse>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()
     {
-        // El filtro global del DbContext ya maneja el bypass si eres Tipo 4.
         var orgs = await _context.Organizaciones
             .Include(o => o.Plan)
-            .Select(o => new OrganizacionResponse(
-                o.Id, o.Nombre, o.Descripcion, o.EmailContacto, o.Telefono,
-                o.Pais, o.Ciudad, o.LogoUrl, o.Activa, o.FechaVencimiento, o.Plan.Nombre
-            ))
             .ToListAsync();
 
-        return Result(orgs, "Organizaciones recuperadas exitosamente.");
+        return Result(orgs.ToResponseList(_s3Service), "Organizaciones recuperadas exitosamente.");
     }
 
     [HttpPost]
     [AuthLvl("o", 3)]
     [EndpointSummary("Crear nueva organización")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Create([FromBody] OrganizacionRequest request)
+    public async Task<IActionResult> Create([FromForm] OrganizacionRequest request)
     {
-        // 1. Usar la estrategia de ejecución para soportar transacciones con RetryingStrategy
         var strategy = _context.Database.CreateExecutionStrategy();
 
         return await strategy.ExecuteAsync(async () =>
         {
-            // Verificamos si el nombre existe (usando IgnoreQueryFilters para duplicados globales)
-            if (await _context.Organizaciones.IgnoreQueryFilters().AnyAsync(o => o.Nombre == request.Nombre))
+            if (await _context.Organizaciones.IgnoreQueryFilters()
+                .AnyAsync(o => o.Nombre == request.Nombre))
                 return Error("El nombre de la organización ya existe.");
 
             using var transaction = await _context.Database.BeginTransactionAsync();
+
             try
             {
+                string? logoPath = null;
+
+                // Subida opcional del logo
+                if (request.Logo != null && request.Logo.Length > 0)
+                {
+                    try
+                    {
+                        var fileName = $"organizaciones/{DateTime.UtcNow.Ticks}_{request.Logo.FileName}";
+                        using var stream = request.Logo.OpenReadStream();
+
+                        await _s3Service.UploadImageAsync(stream, fileName, request.Logo.ContentType);
+                        logoPath = fileName;
+                    }
+                    catch
+                    {
+                        return Error("No se pudo subir el logo de la organización.");
+                    }
+                }
+
                 var nuevaOrg = new Organizacion
                 {
                     Nombre = request.Nombre,
                     Descripcion = request.Descripcion,
                     EmailContacto = request.EmailContacto,
                     Telefono = request.Telefono,
-                    Direccion = request.Direccion,
+
+                    Calle = request.Calle,
+                    NumeroExterior = request.NumeroExterior,
+                    NumeroInterior = request.NumeroInterior,
+                    CP = request.CP,
+                    Colonia = request.Colonia,
+                    Municipio = request.Municipio,
+                    Estado = request.Estado,
                     Pais = request.Pais,
-                    Ciudad = request.Ciudad,
-                    LogoUrl = request.LogoUrl,
+
+                    LogoUrl = logoPath,
                     PlanId = request.PlanId,
                     FechaVencimiento = request.FechaVencimiento,
                     Activa = request.Activa
@@ -80,7 +104,7 @@ public class OrganizacionesController : BaseController
                 _context.Organizaciones.Add(nuevaOrg);
                 await _context.SaveChangesAsync();
 
-                // 2. Activar módulos base (u = usuarios, r = roles)
+                // Activar módulos base
                 var modulosBase = await _context.Modulos
                     .Where(m => m.K == "u" || m.K == "r")
                     .ToListAsync();
@@ -95,9 +119,10 @@ public class OrganizacionesController : BaseController
                         FechaActivacion = DateTime.UtcNow
                     });
                 }
+
                 await _context.SaveChangesAsync();
 
-                // 3. Crear los 3 Roles Maestro
+                // Crear roles base
                 var templates = new List<(string Nombre, int Nivel)>
                 {
                     ("Administrador", 3),
@@ -132,10 +157,10 @@ public class OrganizacionesController : BaseController
 
                 return Result(nuevaOrg.Id, "Organización creada correctamente.");
             }
-            catch (Exception)
+            catch
             {
                 await transaction.RollbackAsync();
-                return Error("Error crítico al configurar los roles base de la organización.");
+                return Error("Error crítico al configurar la organización.");
             }
         });
     }
@@ -143,27 +168,69 @@ public class OrganizacionesController : BaseController
     [HttpPut("{id}")]
     [AuthLvl("o", 3)]
     [EndpointSummary("Editar organización")]
-    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Update(int id, [FromBody] OrganizacionRequest request)
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(ApiResponse<OrganizacionResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Update(int id, [FromForm] OrganizacionRequest request)
     {
-        // Buscamos la org. Si eres Tipo 4, el filtro global te permitirá encontrar cualquiera.
-        var org = await _context.Organizaciones.FirstOrDefaultAsync(o => o.Id == id);
+        var org = await _context.Organizaciones
+            .Include(o => o.Plan)
+            .FirstOrDefaultAsync(o => o.Id == id);
 
-        if (org == null) return Error("Organización no encontrada.");
+        if (org == null)
+            return Error("Organización no encontrada.");
 
+        string? previousLogo = org.LogoUrl;
+
+        // Subida del nuevo logo
+        if (request.Logo != null && request.Logo.Length > 0)
+        {
+            try
+            {
+                var fileName = $"organizaciones/{org.Id}_{DateTime.UtcNow.Ticks}_{request.Logo.FileName}";
+                using var stream = request.Logo.OpenReadStream();
+
+                await _s3Service.UploadImageAsync(stream, fileName, request.Logo.ContentType);
+                org.LogoUrl = fileName;
+
+                if (!string.IsNullOrEmpty(previousLogo))
+                {
+                    try
+                    {
+                        await _s3Service.DeleteImageAsync(previousLogo);
+                    }
+                    catch
+                    {
+                        // no detenemos la operación si falla eliminar
+                    }
+                }
+            }
+            catch
+            {
+                return Error("No se pudo subir el logo proporcionado.");
+            }
+        }
+
+        // Actualizar datos
         org.Nombre = request.Nombre;
         org.Descripcion = request.Descripcion;
         org.EmailContacto = request.EmailContacto;
         org.Telefono = request.Telefono;
-        org.Direccion = request.Direccion;
+
+        org.Calle = request.Calle;
+        org.NumeroExterior = request.NumeroExterior;
+        org.NumeroInterior = request.NumeroInterior;
+        org.CP = request.CP;
+        org.Colonia = request.Colonia;
+        org.Municipio = request.Municipio;
+        org.Estado = request.Estado;
         org.Pais = request.Pais;
-        org.Ciudad = request.Ciudad;
-        org.LogoUrl = request.LogoUrl;
+
         org.PlanId = request.PlanId;
         org.Activa = request.Activa;
         org.FechaVencimiento = request.FechaVencimiento;
 
         await _context.SaveChangesAsync();
-        return Result("Actualizado", "Organización actualizada con éxito.");
+
+        return Result(org.ToResponse(_s3Service), "Organización actualizada con éxito.");
     }
 }

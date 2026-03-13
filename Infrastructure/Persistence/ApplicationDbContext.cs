@@ -6,6 +6,8 @@ using BenitezLabs.Domain.Entities;
 using BenitezLabs.Domain.Common;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Identity;
+using BenitezLabs.Domain.Entities.Empadronamientos;
+using BenitezLabs.Domain.Entities.Catalogos;
 
 namespace EmpadronamientoBackend.Infrastructure.Persistence;
 
@@ -33,6 +35,32 @@ public class ApplicationDbContext : DbContext
     public DbSet<OrganizacionModulo> OrganizacionModulos => Set<OrganizacionModulo>();
     public DbSet<ConfiguracionGlobal> ConfiguracionesGlobales => Set<ConfiguracionGlobal>();
     public DbSet<Plan> Planes => Set<Plan>();
+
+    // ============================
+    // EMPADRONAMIENTO
+    // ============================
+
+    public DbSet<Empadronamiento> Empadronamientos => Set<Empadronamiento>();
+    public DbSet<EmpadronamientoPersona> EmpadronamientoPersonas => Set<EmpadronamientoPersona>();
+    public DbSet<LugarEmpadronamiento> LugaresEmpadronamiento => Set<LugarEmpadronamiento>();
+
+    // ============================
+    // PERSONAS
+    // ============================
+
+    public DbSet<Persona> Personas => Set<Persona>();
+    public DbSet<DireccionPersona> DireccionesPersona => Set<DireccionPersona>();
+    public DbSet<Familiar> Familiares => Set<Familiar>();
+    public DbSet<FotoPersona> FotosPersona => Set<FotoPersona>();
+    public DbSet<RedSocial> RedesSociales => Set<RedSocial>();
+    public DbSet<RostroPersona> RostrosPersona => Set<RostroPersona>();
+
+    // ============================
+    // CATÁLOGOS
+    // ============================
+
+    public DbSet<Catalogo> Catalogos => Set<Catalogo>();
+    public DbSet<CatalogoItem> CatalogoItems => Set<CatalogoItem>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -192,7 +220,7 @@ public class ApplicationDbContext : DbContext
 
         var hasher = new PasswordHasher<Usuario>();
         modelBuilder.Entity<Usuario>().HasData(
-            new Usuario { Id = 1, Nombre = "Admin", Apellidos = "BenitezLabs", Correo = "admin@benitezlabs.com", PasswordHash = hasher.HashPassword(null!, "Admin123!"), OrganizacionId = 1, RoleId = 1,Tipo = 3, Activo = true, CorreoConfirmado = true, IntentosFallidos = 0, FechaCreacion = fechaSeed, CreadoPor = sys, IpCreacion = ipSeed, DispositivoCreacion = devSeed },
+            new Usuario { Id = 1, Nombre = "Admin", Apellidos = "BenitezLabs", Correo = "admin@benitezlabs.com", PasswordHash = hasher.HashPassword(null!, "Admin123!"), OrganizacionId = 1, RoleId = 1, Tipo = 3, Activo = true, CorreoConfirmado = true, IntentosFallidos = 0, FechaCreacion = fechaSeed, CreadoPor = sys, IpCreacion = ipSeed, DispositivoCreacion = devSeed },
             new Usuario { Id = 2, Nombre = "Demo", Apellidos = "Operator", Correo = "user@benitezlabs.com", PasswordHash = hasher.HashPassword(null!, "Admin123!"), OrganizacionId = 1, RoleId = 2, Tipo = 1, Activo = true, CorreoConfirmado = true, IntentosFallidos = 0, FechaCreacion = fechaSeed, CreadoPor = sys, IpCreacion = ipSeed, DispositivoCreacion = devSeed }
         );
     }

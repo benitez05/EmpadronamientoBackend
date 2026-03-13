@@ -133,18 +133,42 @@ public class AuthController : BaseController
             .IgnoreQueryFilters()
             .Include(u => u.Organizacion)
                 .ThenInclude(o => o.ModulosContratados)
-                    .ThenInclude(om => om.Modulo) // Importante para obtener la 'K'
+                    .ThenInclude(om => om.Modulo)
             .Include(u => u.Role)
                 .ThenInclude(r => r.Permisos)
                     .ThenInclude(p => p.Modulo)
             .SingleOrDefaultAsync(u => u.Correo == request.Correo);
 
-        if (user == null || !_passwordService.IsValidPassword(user, request.Password))
+        // 2. Validamos existencia del usuario
+        if (user == null)
             return Error("El correo o la contraseña son incorrectos.");
 
-        if (!user.Activo) return Error("Tu cuenta de usuario está desactivada.");
+        // 3. Verificamos si el usuario está bloqueado por intentos fallidos
+        if (user.BloqueadoHasta.HasValue && user.BloqueadoHasta.Value > DateTime.UtcNow)
+            return Error($"Tu cuenta está bloqueada hasta {user.BloqueadoHasta.Value.ToLocalTime():HH:mm} por intentos fallidos.");
 
-        // 2. Validaciones de Organización (Bypass Tipo 4)
+        // 4. Validamos contraseña
+        if (!_passwordService.IsValidPassword(user, request.Password))
+        {
+            user.IntentosFallidos++;
+
+            // Bloqueo tras 5 intentos fallidos
+            if (user.IntentosFallidos >= 5)
+                user.BloqueadoHasta = DateTime.UtcNow.AddMinutes(15);
+
+            await _context.SaveChangesAsync();
+            return Error("El correo o la contraseña son incorrectos.");
+        }
+
+        // 5. Resetear intentos fallidos tras login exitoso
+        user.IntentosFallidos = 0;
+        user.BloqueadoHasta = null;
+
+        // 6. Validamos si el usuario está activo
+        if (!user.Activo)
+            return Error("Tu cuenta de usuario está desactivada.");
+
+        // 7. Validaciones de Organización (Bypass Tipo 4)
         if (user.Tipo != 4)
         {
             if (user.Organizacion == null || !user.Organizacion.Activa)
@@ -154,10 +178,8 @@ public class AuthController : BaseController
                 return Error("El contrato de tu organización ha vencido.");
         }
 
-        // 3. LÓGICA DE PERMISOS DINÁMICA
+        // 8. Lógica de permisos según tipo de usuario
         Dictionary<string, int> permisosDict;
-
-        // Obtener módulos activos de la organización
         var modulosContratados = user.Organizacion?.ModulosContratados?
             .Where(om => om.Activo && om.Modulo != null)
             .Select(om => om.Modulo)
@@ -165,8 +187,6 @@ public class AuthController : BaseController
 
         if (user.Tipo >= 2)
         {
-            // BYPASS PARA ADMINS (2, 3 y 4): Nivel 3 en todo lo contratado
-            // Si es Tipo 4, le damos acceso a TODO el catálogo global de módulos
             var modulosVisibles = user.Tipo == 4
                 ? await _context.Modulos.ToListAsync()
                 : modulosContratados;
@@ -175,7 +195,6 @@ public class AuthController : BaseController
         }
         else
         {
-            // TIPO 1: Solo lo que diga su Rol, limitado a lo que la empresa pagó
             var contratadosIds = modulosContratados.Select(m => m.Id).ToList();
             permisosDict = user.Role?.Permisos?
                 .Where(p => p.Modulo != null && contratadosIds.Contains(p.ModuloId))
@@ -183,7 +202,7 @@ public class AuthController : BaseController
                 ?? new Dictionary<string, int>();
         }
 
-        // 4. Generación de Tokens y Sesión
+        // 9. Generación de tokens y sesión
         var tokenData = _passwordService.GenerateJwtToken(user);
         var refreshToken = _passwordService.GenerateRefreshToken();
 
@@ -200,6 +219,7 @@ public class AuthController : BaseController
 
         _context.UsuarioSesiones.Add(nuevaSesion);
         user.UltimoLogin = DateTime.UtcNow;
+
         await _context.SaveChangesAsync();
 
         return Result(new LoginResponse

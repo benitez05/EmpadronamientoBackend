@@ -62,7 +62,7 @@ public class PasswordService : IPasswordService
 
             { "iss", _configuration["Jwt:Issuer"] },
             { "aud", _configuration["Jwt:Audience"] },
-            { "exp", (int)DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds() }
+            { "exp", (int)DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds() }
         };
 
         var header = new JwtHeader(creds);

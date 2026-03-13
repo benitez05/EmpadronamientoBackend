@@ -7,6 +7,7 @@ using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.Interfaces;
 using EmpadronamientoBackend.Infrastructure.Persistence;
 using BenitezLabs.Domain.Entities;
+using EmpadronamientoBackend.Infrastructure.Services;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
@@ -17,15 +18,18 @@ public class UsuariosController : BaseController
     private readonly ApplicationDbContext _context;
     private readonly ICacheService _cacheService;
     private readonly ICurrentUserService _currentUser;
+    private readonly IS3Service _s3Service;
 
     public UsuariosController(
         ApplicationDbContext context,
         ICacheService cacheService,
+        IS3Service s3Service,
         ICurrentUserService currentUser)
     {
         _context = context;
         _cacheService = cacheService;
         _currentUser = currentUser;
+        _s3Service = s3Service;
     }
 
     #region GESTIÓN DE SESIONES Y SEGURIDAD (USER ME)
@@ -54,38 +58,59 @@ public class UsuariosController : BaseController
     }
 
     [HttpPut("{id}")]
-    [AuthLvl("u", 2)] // Nivel 2: Edición/Escritura
+    [AuthLvl("u", 2)]
     [EndpointSummary("Editar perfil de usuario")]
-    public async Task<IActionResult> Update(int id, [FromBody] UpdateUsuarioRequest request)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> Update(int id, [FromForm] UpdateUsuarioRequest request)
     {
-        // 1. Buscamos al usuario (El Global Filter ya protege la OrganizacionId)
+
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
-
         if (usuario == null)
-            return Error("Usuario no encontrado.");
-
-        // 2. Validación de Rol (Si se intenta cambiar)
-        if (request.RoleId.HasValue && request.RoleId != usuario.RoleId)
         {
-            // Verificamos que el nuevo rol también pertenezca a la misma organización
-            var rolValido = await _context.Roles.AnyAsync(r => r.Id == request.RoleId);
-            if (!rolValido) return Error("El rol especificado no es válido.");
-
-            usuario.RoleId = request.RoleId.Value;
+            return Error("Usuario no encontrado.");
         }
 
-        // 3. Mapeo de campos permitidos
+        string previousImage = usuario.Imagen;
+
+        // Subida de imagen si se proporciona
+        if (request.Imagen != null && request.Imagen.Length > 0)
+        {
+            try
+            {
+                var fileName = $"usuarios/{usuario.Id}_{DateTime.UtcNow.Ticks}_{request.Imagen.FileName}";
+                using var stream = request.Imagen.OpenReadStream();
+
+                // ✅ Usar la instancia inyectada
+                var url = await _s3Service.UploadImageAsync(stream, fileName, request.Imagen.ContentType);
+                usuario.Imagen = fileName;
+
+                 // Eliminar imagen anterior si existía
+            if (!string.IsNullOrEmpty(previousImage))
+            {
+                try
+                {
+                    await _s3Service.DeleteImageAsync(previousImage);
+                }
+                catch (Exception ex)
+                {
+                    // No interrumpimos la actualización por un fallo en eliminar la imagen anterior
+                }
+            }
+
+            }
+            catch (Exception ex)
+            {
+                return Error("No se pudo subir la imagen proporcionada.");
+            }
+        }
+
+        // Mapeo de campos permitidos
         usuario.Nombre = request.Nombre;
         usuario.Apellidos = request.Apellidos;
         usuario.Celular = request.Celular;
-        usuario.Imagen = request.Imagen;
 
-        // 4. Guardado
-        // Tu override de SaveChangesAsync pondrá automáticamente:
-        // ActualizadoPor, FechaUltimaActualizacion, Ip y Dispositivo.
         await _context.SaveChangesAsync();
-
-        return Result(usuario.ToResponse(), "Los datos del usuario han sido actualizados.");
+        return Result(usuario.ToResponse(_s3Service), "Los datos del usuario han sido actualizados.");
     }
 
     [HttpDelete("me/sessions/{id}")]
@@ -150,7 +175,10 @@ public class UsuariosController : BaseController
 
         if (usuario == null) return Error("Usuario no encontrado.");
 
-        return Result(usuario.ToResponse(), "Detalle del usuario recuperado.");
+        // Usamos el servicio inyectado para generar URL prefirmada
+        var response = usuario.ToResponse(_s3Service);
+
+        return Result(response, "Detalle del usuario recuperado.");
     }
 
     [HttpPut("{id}/role")]

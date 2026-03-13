@@ -9,9 +9,14 @@ using System.Text;
 using System.Reflection;
 using System.ComponentModel;
 using System.IdentityModel.Tokens.Jwt;
+
+using Amazon.S3;
+using Amazon.Rekognition;
+using Amazon.Extensions.NETCore.Setup;
+
 using EmpadronamientoBackend.API.Filters;
 using EmpadronamientoBackend.Infrastructure.Identity;
-using EmpadronamientoBackend.Infrastructure.Services; // Nuevo para CurrentUserService
+using EmpadronamientoBackend.Infrastructure.Services;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Infrastructure.Cache;
 using EmpadronamientoBackend.Application.Interfaces;
@@ -24,25 +29,29 @@ public static class ServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // 1. CONFIGURACIÓN DE CONTROLADORES Y FILTROS
+
+        // 1. CONTROLADORES Y FILTROS
         services.AddControllers(options =>
         {
             options.Filters.Add<ValidationFilter>();
         });
 
-        // 2. CONFIGURACIÓN DE FLUENTVALIDATION
-        services.AddValidatorsFromAssembly(typeof(EmpadronamientoBackend.Application.DTOs.Requests.LoginRequest).Assembly);
+
+        // 2. FLUENTVALIDATION
+        services.AddValidatorsFromAssembly(
+            typeof(EmpadronamientoBackend.Application.DTOs.Requests.LoginRequest).Assembly
+        );
 
         services.AddFluentValidationAutoValidation(config =>
         {
             config.DisableDataAnnotationsValidation = true;
         });
 
-        // 3. CONFIGURACIÓN DE OPENAPI (.NET 9 + SCALAR)
+
+        // 3. OPENAPI
         services.AddEndpointsApiExplorer();
         services.AddOpenApi(options =>
         {
-            // --- TRANSFORMADOR DE DOCUMENTO (SEGURIDAD GLOBAL) ---
             options.AddDocumentTransformer((document, context, cancellationToken) =>
             {
                 document.Info.Title = "Empadronamiento API";
@@ -56,7 +65,7 @@ public static class ServiceExtensions
                     Scheme = "bearer",
                     BearerFormat = "JWT",
                     In = ParameterLocation.Header,
-                    Description = "Introduce tu token JWT. Scalar lo usará en todos los endpoints con [Authorize]."
+                    Description = "Introduce tu token JWT."
                 };
 
                 document.Components ??= new OpenApiComponents();
@@ -78,10 +87,10 @@ public static class ServiceExtensions
                 };
 
                 document.SecurityRequirements.Add(requirement);
+
                 return Task.CompletedTask;
             });
 
-            // --- TRANSFORMADOR DE ESQUEMA (EJEMPLOS [DefaultValue]) ---
             options.AddSchemaTransformer((schema, context, cancellationToken) =>
             {
                 if (context.JsonTypeInfo.Type == null || schema.Properties == null)
@@ -101,16 +110,15 @@ public static class ServiceExtensions
                         property.Value.Example = new OpenApiString(defaultAttr.Value?.ToString());
                     }
                 }
+
                 return Task.CompletedTask;
             });
         });
 
-        // 4. COMPORTAMIENTO DE API PERSONALIZADO
-        // 4. COMPORTAMIENTO DE API PERSONALIZADO
+
+        // 4. RESPUESTA PERSONALIZADA DE VALIDACIÓN
         services.Configure<ApiBehaviorOptions>(options =>
         {
-            // Deshabilitamos el filtro automático para que nuestro ValidationFilter 
-            // o esta fábrica manejen la respuesta.
             options.SuppressModelStateInvalidFilter = false;
 
             options.InvalidModelStateResponseFactory = context =>
@@ -122,23 +130,19 @@ public static class ServiceExtensions
                         var error = e.Value!.Errors.First();
                         var mensaje = error.ErrorMessage;
 
-                        // --- MEJORA: Detectar errores de conversión de JSON (como fechas) ---
                         if (string.IsNullOrEmpty(mensaje) && error.Exception != null)
                         {
-                            // Si el error es por formato de fecha en fechaVencimiento
                             if (e.Key.Contains("fechaVencimiento", StringComparison.OrdinalIgnoreCase))
                             {
-                                return "El formato de 'fechaVencimiento' es inválido. Use ISO 8601 (Ej: 2026-03-06T00:00:00Z).";
+                                return "El formato de 'fechaVencimiento' es inválido. Use ISO 8601.";
                             }
 
-                            // Error genérico de conversión
-                            return $"Error de formato en el campo '{e.Key}': el valor enviado no es válido.";
+                            return $"Error de formato en el campo '{e.Key}'.";
                         }
 
                         return mensaje;
                     }).ToList();
 
-                // Usamos tu ApiResponseFactory para mantener la estética de BenitezLabs
                 var response = ApiResponseFactory.Fail<object>(
                     "Error de validación en la estructura de los datos.",
                     errors: errors,
@@ -149,15 +153,16 @@ public static class ServiceExtensions
             };
         });
 
-        // 5. SERVICIOS DE IDENTIDAD, CACHE Y CONTEXTO (LO NUEVO)
+
+        // 5. SERVICIOS DE IDENTIDAD Y CACHE
         services.AddScoped<IPasswordService, PasswordService>();
 
-        // Habilita el acceso al HttpContext (Necesario para CurrentUserService)
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
 
         services.AddMemoryCache();
         services.AddSingleton<ICacheService, MemoryCacheService>();
+
 
         // 6. AUTENTICACIÓN JWT
         var jwtKey = configuration["Jwt:Key"] ?? "ClaveTemporalDeSeguridadBenitezLabs2026";
@@ -169,15 +174,19 @@ public static class ServiceExtensions
         })
         .AddJwtBearer(options =>
         {
+
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
                 ValidateAudience = true,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
+
                 ValidIssuer = configuration["Jwt:Issuer"],
                 ValidAudience = configuration["Jwt:Audience"],
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+
+                IssuerSigningKey =
+                    new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
 
                 RoleClaimType = "role",
                 NameClaimType = JwtRegisteredClaimNames.Sub
@@ -185,7 +194,7 @@ public static class ServiceExtensions
 
             options.Events = new JwtBearerEvents
             {
-                // Validación de sesión activa (Logout real)
+
                 OnTokenValidated = async context =>
                 {
                     var cache = context.HttpContext.RequestServices.GetRequiredService<ICacheService>();
@@ -200,6 +209,7 @@ public static class ServiceExtensions
                 OnChallenge = async context =>
                 {
                     context.HandleResponse();
+
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     context.Response.ContentType = "application/json";
 
@@ -210,25 +220,16 @@ public static class ServiceExtensions
 
                     await context.Response.WriteAsJsonAsync(response);
                 },
+
                 OnForbidden = async context =>
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     context.Response.ContentType = "application/json";
 
-                    var modulo = context.HttpContext.Items["AuthError_Key"]?.ToString() ?? "desconocido";
-                    var nivelRequerido = context.HttpContext.Items["AuthError_Level"]?.ToString() ?? "0";
-
-                    string desc = nivelRequerido switch
-                    {
-                        "1" => "Lectura",
-                        "2" => "Escritura",
-                        "3" => "Eliminación",
-                        "4" or "5" => "Permiso Especial / Auditoría",
-                        _ => "Acceso Restringido"
-                    };
-
-                    var mensaje = $"Acceso denegado. Requieres nivel {nivelRequerido} ({desc}) en el módulo '{modulo}'.";
-                    var response = ApiResponseFactory.Fail<object>(mensaje, code: "AUTH_403");
+                    var response = ApiResponseFactory.Fail<object>(
+                        "No tienes permisos para acceder a este recurso.",
+                        code: "AUTH_403"
+                    );
 
                     await context.Response.WriteAsJsonAsync(response);
                 }
@@ -236,6 +237,24 @@ public static class ServiceExtensions
         });
 
         services.AddAuthorization();
+
+
+        // 7. CONFIGURACIÓN AWS (S3 + REKOGNITION)
+
+        var awsOptions = configuration.GetAWSOptions();
+
+        services.AddDefaultAWSOptions(awsOptions);
+
+        // Cliente S3
+        services.AddAWSService<IAmazonS3>();
+
+        // Cliente Rekognition
+        services.AddAWSService<IAmazonRekognition>();
+
+        // Servicios de infraestructura
+        services.AddScoped<IS3Service, S3Service>();
+        services.AddScoped<IRekognitionService, RekognitionService>();
+
 
         return services;
     }
