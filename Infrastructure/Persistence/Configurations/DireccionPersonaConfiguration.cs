@@ -20,6 +20,14 @@ public class DireccionPersonaConfiguration : IEntityTypeConfiguration<DireccionP
         builder.Property(x => x.Estado).HasMaxLength(150);
         builder.Property(x => x.Pais).HasMaxLength(150);
         builder.Property(x => x.Referencia).HasMaxLength(500);
+
+        // Latitud: Máximo 90.00000000 (2 enteros + 8 decimales = 10 dígitos)
+        builder.Property(x => x.Latitud)
+            .HasPrecision(10, 8);
+
+        // Longitud: Máximo 180.00000000 (3 enteros + 8 decimales = 11 dígitos)
+        builder.Property(x => x.Longitud)
+            .HasPrecision(11, 8);
         builder.HasOne(x => x.Persona)
             .WithMany(p => p.Direcciones)
             .HasForeignKey(x => x.PersonaId);

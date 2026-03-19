@@ -11,17 +11,16 @@ public class CrearLugarEmpadronamientoRequest
 
     public int CP { get; set; }
 
-    public string? Colonia { get; set; }
+    public required string Colonia { get; set; }
 
-    public string? Municipio { get; set; }
+    public required string Municipio { get; set; }
 
-    public string? Estado { get; set; }
-
+    public required string Estado { get; set; }
     public string? Referencia { get; set; }
 
-    public decimal? Latitud { get; set; }
+    public decimal Latitud { get; set; }
 
-    public decimal? Longitud { get; set; }
+    public decimal Longitud { get; set; }
 
     public int ImagenID { get; set; }
 }
