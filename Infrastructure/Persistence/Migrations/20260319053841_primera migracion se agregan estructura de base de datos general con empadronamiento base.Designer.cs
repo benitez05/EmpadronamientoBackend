@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260313063342_se agregan tablas de sistema")]
-    partial class seagregantablasdesistema
+    [Migration("20260319053841_primera migracion se agregan estructura de base de datos general con empadronamiento base")]
+    partial class primeramigracionseagreganestructuradebasededatosgeneralconempadronamientobase
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -27,6 +27,86 @@ namespace Infrastructure.Persistence.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
+
+            modelBuilder.Entity("BenitezLabs.Domain.Entities.Cara", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActualizadoPor")
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("BoundingBox")
+                        .HasColumnType("longtext");
+
+                    b.Property<float>("Confidence")
+                        .HasColumnType("float");
+
+                    b.Property<string>("CreadoPor")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("DispositivoCreacion")
+                        .HasMaxLength(250)
+                        .HasColumnType("varchar(250)");
+
+                    b.Property<string>("DispositivoUltimaActualizacion")
+                        .HasMaxLength(250)
+                        .HasColumnType("varchar(250)");
+
+                    b.Property<string>("FaceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("FechaUltimaActualizacion")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("IdFoto")
+                        .HasColumnType("int");
+
+                    b.Property<string>("IpCreacion")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("IpUltimaActualizacion")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("OrganizacionId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PersonaId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("S3Key")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FaceId")
+                        .IsUnique();
+
+                    b.HasIndex("IdFoto");
+
+                    b.HasIndex("OrganizacionId");
+
+                    b.HasIndex("PersonaId");
+
+                    b.HasIndex("S3Key");
+
+                    b.ToTable("Caras", (string)null);
+                });
 
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Catalogos.Catalogo", b =>
                 {
@@ -92,6 +172,78 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Catalogos", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Clave = "TIPO_RED_SOCIAL",
+                            CreadoPor = "System_Seed",
+                            Descripcion = "Redes sociales disponibles",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Tipo de Red Social",
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Clave = "ESTADO_CIVIL",
+                            CreadoPor = "System_Seed",
+                            Descripcion = "Estado civil de la persona",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Estado Civil",
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Clave = "ESCOLARIDAD",
+                            CreadoPor = "System_Seed",
+                            Descripcion = "Nivel educativo",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Escolaridad",
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Clave = "TIPO_FOTO",
+                            CreadoPor = "System_Seed",
+                            Descripcion = "Clasificación de fotografías",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Tipo de Foto",
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Clave = "PARENTESCO",
+                            CreadoPor = "System_Seed",
+                            Descripcion = "Relación familiar",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Parentesco",
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Clave = "TIPO_CARRO_RADIO_PATRULLA",
+                            CreadoPor = "System_Seed",
+                            Descripcion = "Tipos de unidades",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Tipo Carro Radio Patrulla",
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Clave = "OFICIO_PROFESION",
+                            CreadoPor = "System_Seed",
+                            Descripcion = "Ocupación de la persona",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Nombre = "Oficio / Profesión",
+                            OrganizacionId = 1
+                        });
                 });
 
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Catalogos.CatalogoItem", b =>
@@ -163,6 +315,610 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("CatalogoId", "Orden");
 
                     b.ToTable("CatalogoItems", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Activo = true,
+                            CatalogoId = 1,
+                            Codigo = "FACEBOOK",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Facebook",
+                            Orden = 1,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Activo = true,
+                            CatalogoId = 1,
+                            Codigo = "INSTAGRAM",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Instagram",
+                            Orden = 2,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Activo = true,
+                            CatalogoId = 1,
+                            Codigo = "X",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "X (Twitter)",
+                            Orden = 3,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Activo = true,
+                            CatalogoId = 1,
+                            Codigo = "TIKTOK",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "TikTok",
+                            Orden = 4,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Activo = true,
+                            CatalogoId = 1,
+                            Codigo = "WHATSAPP",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "WhatsApp",
+                            Orden = 5,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Activo = true,
+                            CatalogoId = 1,
+                            Codigo = "TELEGRAM",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Telegram",
+                            Orden = 6,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Activo = true,
+                            CatalogoId = 2,
+                            Codigo = "SOLTERO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Soltero",
+                            Orden = 1,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Activo = true,
+                            CatalogoId = 2,
+                            Codigo = "CASADO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Casado",
+                            Orden = 2,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Activo = true,
+                            CatalogoId = 2,
+                            Codigo = "DIVORCIADO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Divorciado",
+                            Orden = 3,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Activo = true,
+                            CatalogoId = 2,
+                            Codigo = "UNION_LIBRE",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Unión Libre",
+                            Orden = 4,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Activo = true,
+                            CatalogoId = 2,
+                            Codigo = "VIUDO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Viudo",
+                            Orden = 5,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "SIN_ESTUDIOS",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Sin estudios",
+                            Orden = 1,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "PRIMARIA",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Primaria",
+                            Orden = 2,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "SECUNDARIA",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Secundaria",
+                            Orden = 3,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "PREPARATORIA",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Preparatoria",
+                            Orden = 4,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "TECNICO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Técnico",
+                            Orden = 5,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "LICENCIATURA",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Licenciatura",
+                            Orden = 6,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "MAESTRIA",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Maestría",
+                            Orden = 7,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Activo = true,
+                            CatalogoId = 3,
+                            Codigo = "DOCTORADO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Doctorado",
+                            Orden = 8,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 30,
+                            Activo = true,
+                            CatalogoId = 4,
+                            Codigo = "ROSTRO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Rostro",
+                            Orden = 1,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 31,
+                            Activo = true,
+                            CatalogoId = 4,
+                            Codigo = "CUERPO_COMPLETO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Cuerpo Completo",
+                            Orden = 2,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 32,
+                            Activo = true,
+                            CatalogoId = 4,
+                            Codigo = "IDENTIFICACION",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Identificación",
+                            Orden = 3,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 33,
+                            Activo = true,
+                            CatalogoId = 4,
+                            Codigo = "SENAS",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Señas Particulares",
+                            Orden = 4,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 40,
+                            Activo = true,
+                            CatalogoId = 5,
+                            Codigo = "PADRE",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Padre",
+                            Orden = 1,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 41,
+                            Activo = true,
+                            CatalogoId = 5,
+                            Codigo = "MADRE",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Madre",
+                            Orden = 2,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 42,
+                            Activo = true,
+                            CatalogoId = 5,
+                            Codigo = "HERMANO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Hermano(a)",
+                            Orden = 3,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 43,
+                            Activo = true,
+                            CatalogoId = 5,
+                            Codigo = "PAREJA",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Pareja",
+                            Orden = 4,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 44,
+                            Activo = true,
+                            CatalogoId = 5,
+                            Codigo = "HIJO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Hijo(a)",
+                            Orden = 5,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 45,
+                            Activo = true,
+                            CatalogoId = 5,
+                            Codigo = "OTRO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Otro",
+                            Orden = 6,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 50,
+                            Activo = true,
+                            CatalogoId = 6,
+                            Codigo = "SEDAN",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Sedán",
+                            Orden = 1,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 51,
+                            Activo = true,
+                            CatalogoId = 6,
+                            Codigo = "PICKUP",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "PickUp",
+                            Orden = 2,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 52,
+                            Activo = true,
+                            CatalogoId = 6,
+                            Codigo = "MOTO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Motocicleta",
+                            Orden = 3,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 53,
+                            Activo = true,
+                            CatalogoId = 6,
+                            Codigo = "SUV",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "SUV",
+                            Orden = 4,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 60,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "EMPLEADO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Empleado",
+                            Orden = 1,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 61,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "OBRERO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Obrero",
+                            Orden = 2,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 62,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "COMERCIANTE",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Comerciante",
+                            Orden = 3,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 63,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "ESTUDIANTE",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Estudiante",
+                            Orden = 4,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 64,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "DESEMPLEADO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Desempleado",
+                            Orden = 5,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 65,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "CHOFER",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Chofer",
+                            Orden = 6,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 66,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "ALBANIL",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Albañil",
+                            Orden = 7,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 67,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "TECNICO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Técnico",
+                            Orden = 8,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 68,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "PROFESIONISTA",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Profesionista",
+                            Orden = 9,
+                            OrganizacionId = 1
+                        },
+                        new
+                        {
+                            Id = 69,
+                            Activo = true,
+                            CatalogoId = 7,
+                            Codigo = "OTRO",
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1",
+                            Nombre = "Otro",
+                            Orden = 10,
+                            OrganizacionId = 1
+                        });
                 });
 
             modelBuilder.Entity("BenitezLabs.Domain.Entities.ConfiguracionGlobal", b =>
@@ -297,10 +1053,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FechaUltimaActualizacion")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("ImagenUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
                     b.Property<string>("IpCreacion")
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
@@ -415,12 +1167,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("varchar(150)");
 
-                    b.Property<string>("CRPId")
+                    b.Property<string>("CRP")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
-
-                    b.Property<int?>("CRPNombre")
-                        .HasColumnType("int");
 
                     b.Property<string>("CreadoPor")
                         .IsRequired()
@@ -531,10 +1280,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FechaUltimaActualizacion")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("ImagenUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
                     b.Property<string>("IpCreacion")
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
@@ -628,10 +1373,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("OrganizacionId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("ParentescoId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ParentescoNombre")
+                    b.Property<string>("Parentesco")
                         .HasColumnType("longtext");
 
                     b.Property<int>("PersonaId")
@@ -648,7 +1390,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("Familiares", (string)null);
                 });
 
-            modelBuilder.Entity("BenitezLabs.Domain.Entities.FotoPersona", b =>
+            modelBuilder.Entity("BenitezLabs.Domain.Entities.Foto", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -656,64 +1398,39 @@ namespace Infrastructure.Persistence.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("ActualizadoPor")
-                        .HasMaxLength(150)
-                        .HasColumnType("varchar(150)");
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
 
-                    b.Property<string>("CreadoPor")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("varchar(150)");
+                    b.Property<int?>("IdEmpadronamiento")
+                        .HasColumnType("int");
 
-                    b.Property<string>("DispositivoCreacion")
-                        .HasMaxLength(250)
-                        .HasColumnType("varchar(250)");
-
-                    b.Property<string>("DispositivoUltimaActualizacion")
-                        .HasMaxLength(250)
-                        .HasColumnType("varchar(250)");
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime>("FechaRegistro")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("FechaUltimaActualizacion")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("IpCreacion")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<string>("IpUltimaActualizacion")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
+                    b.Property<int?>("IdPersona")
+                        .HasColumnType("int");
 
                     b.Property<int>("OrganizacionId")
                         .HasColumnType("int");
 
-                    b.Property<int>("PersonaId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("TipoFotoId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("TipoFotoNombre")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("Url")
+                    b.Property<string>("S3Key")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
+                    b.Property<string>("Tipo")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("PersonaId");
+                    b.HasIndex("IdEmpadronamiento");
 
-                    b.ToTable("FotosPersona", (string)null);
+                    b.HasIndex("IdPersona");
+
+                    b.HasIndex("OrganizacionId");
+
+                    b.HasIndex("S3Key");
+
+                    b.ToTable("Fotos", (string)null);
                 });
 
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Modulo", b =>
@@ -723,6 +1440,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(7)
+                        .HasColumnType("varchar(7)")
+                        .HasDefaultValue("#3B82F6");
+
+                    b.Property<string>("Icono")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
 
                     b.Property<string>("K")
                         .IsRequired()
@@ -745,26 +1473,51 @@ namespace Infrastructure.Persistence.Migrations
                         new
                         {
                             Id = 1,
+                            Color = "#6B7280",
                             K = "u",
                             Nombre = "Usuarios"
                         },
                         new
                         {
                             Id = 2,
+                            Color = "#6B7280",
                             K = "r",
                             Nombre = "Roles"
                         },
                         new
                         {
                             Id = 3,
+                            Color = "#6B7280",
                             K = "o",
                             Nombre = "Organizaciones"
                         },
                         new
                         {
                             Id = 4,
+                            Color = "#6B7280",
                             K = "c",
                             Nombre = "Configuración"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Color = "#6B7280",
+                            K = "e",
+                            Nombre = "Empadronamiento"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Color = "#6B7280",
+                            K = "b",
+                            Nombre = "Busqueda"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Color = "#6B7280",
+                            K = "t",
+                            Nombre = "Estadisticas"
                         });
                 });
 
@@ -855,7 +1608,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("NumeroInterior")
-                        .IsRequired()
                         .HasColumnType("longtext");
 
                     b.Property<string>("Pais")
@@ -993,6 +1745,39 @@ namespace Infrastructure.Persistence.Migrations
                             FechaActivacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             IpCreacion = "127.0.0.1"
+                        },
+                        new
+                        {
+                            OrganizacionId = 1,
+                            ModuloId = 5,
+                            Activo = true,
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaActivacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1"
+                        },
+                        new
+                        {
+                            OrganizacionId = 1,
+                            ModuloId = 6,
+                            Activo = true,
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaActivacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1"
+                        },
+                        new
+                        {
+                            OrganizacionId = 1,
+                            ModuloId = 7,
+                            Activo = true,
+                            CreadoPor = "System_Seed",
+                            DispositivoCreacion = "Console_Setup",
+                            FechaActivacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            FechaCreacion = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IpCreacion = "127.0.0.1"
                         });
                 });
 
@@ -1038,16 +1823,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int?>("Edad")
                         .HasColumnType("int");
 
-                    b.Property<int?>("EscolaridadId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EscolaridadNombre")
+                    b.Property<string>("Escolaridad")
                         .HasColumnType("longtext");
 
-                    b.Property<int?>("EstadoCivilId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EstadoCivilNombre")
+                    b.Property<string>("EstadoCivil")
                         .HasColumnType("longtext");
 
                     b.Property<decimal?>("Estatura")
@@ -1071,7 +1850,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(50)");
 
                     b.Property<string>("Nacionalidad")
-                        .HasColumnType("longtext");
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
 
                     b.Property<string>("Nombre")
                         .IsRequired()
@@ -1091,7 +1871,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<string>("Sexo")
-                        .HasColumnType("longtext");
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
 
                     b.Property<string>("Telefono")
                         .HasMaxLength(20)
@@ -1100,6 +1881,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrganizacionId");
+
+                    b.HasIndex("Nombre", "ApellidoPaterno", "ApellidoMaterno");
 
                     b.ToTable("Personas", (string)null);
                 });
@@ -1149,10 +1932,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("PersonaId")
                         .HasColumnType("int");
 
-                    b.Property<int>("TipoRedSocialId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("TipoRedSocialNombre")
+                    b.Property<string>("TipoRedSocial")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
@@ -1285,90 +2065,6 @@ namespace Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("BenitezLabs.Domain.Entities.RostroPersona", b =>
-                {
-                    b.Property<int>("IdRostro")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("IdRostro"));
-
-                    b.Property<string>("ActualizadoPor")
-                        .HasMaxLength(150)
-                        .HasColumnType("varchar(150)");
-
-                    b.Property<decimal?>("BoundingBoxHeight")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<decimal?>("BoundingBoxLeft")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<decimal?>("BoundingBoxTop")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<decimal?>("BoundingBoxWidth")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<decimal?>("Confianza")
-                        .HasColumnType("decimal(65,30)");
-
-                    b.Property<string>("CreadoPor")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("varchar(150)");
-
-                    b.Property<string>("DispositivoCreacion")
-                        .HasMaxLength(250)
-                        .HasColumnType("varchar(250)");
-
-                    b.Property<string>("DispositivoUltimaActualizacion")
-                        .HasMaxLength(250)
-                        .HasColumnType("varchar(250)");
-
-                    b.Property<string>("FaceId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("FechaUltimaActualizacion")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("ImageId")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)");
-
-                    b.Property<string>("ImageUri")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<string>("IpCreacion")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<string>("IpUltimaActualizacion")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<int>("OrganizacionId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("PersonaId")
-                        .HasColumnType("int");
-
-                    b.HasKey("IdRostro");
-
-                    b.HasIndex("OrganizacionId");
-
-                    b.HasIndex("PersonaId");
-
-                    b.ToTable("RostrosPersona", (string)null);
-                });
-
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Usuario", b =>
                 {
                     b.Property<int>("Id")
@@ -1497,7 +2193,7 @@ namespace Infrastructure.Persistence.Migrations
                             IpCreacion = "127.0.0.1",
                             Nombre = "Admin",
                             OrganizacionId = 1,
-                            PasswordHash = "AQAAAAIAAYagAAAAEKIjY3wt3qPaRhFO0BGcEIuIfNdUuqgxjWYU/viWo0ZQgAPDOvPQS2wx2XedAp2pdg==",
+                            PasswordHash = "AQAAAAIAAYagAAAAEKWzdzP/P6mrZttyDRuyukZr3uPT1tCKREhCtOHFphcUSnABVE2dL1dI5QnypkNQSA==",
                             RoleId = 1,
                             Tipo = 3
                         },
@@ -1515,7 +2211,7 @@ namespace Infrastructure.Persistence.Migrations
                             IpCreacion = "127.0.0.1",
                             Nombre = "Demo",
                             OrganizacionId = 1,
-                            PasswordHash = "AQAAAAIAAYagAAAAEEYSCDySFgvE0UwM0+n79baMDGhN6nAIaFNUOilvMDF87VPHDXj3iba8KytIQC9ToQ==",
+                            PasswordHash = "AQAAAAIAAYagAAAAEK+6oRidzBafsPDQ2nQHEVvgFOQAJ/N9BBF4ypJDXM4LR9zwZLGkwNbyjyGfEbXvJw==",
                             RoleId = 2,
                             Tipo = 1
                         });
@@ -1612,6 +2308,21 @@ namespace Infrastructure.Persistence.Migrations
                             Nombre = "Plan Maestro / Enterprise",
                             Precio = 0m
                         });
+                });
+
+            modelBuilder.Entity("BenitezLabs.Domain.Entities.Cara", b =>
+                {
+                    b.HasOne("BenitezLabs.Domain.Entities.Foto", "Foto")
+                        .WithMany()
+                        .HasForeignKey("IdFoto")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BenitezLabs.Domain.Entities.Persona", null)
+                        .WithMany("Caras")
+                        .HasForeignKey("PersonaId");
+
+                    b.Navigation("Foto");
                 });
 
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Catalogos.Catalogo", b =>
@@ -1723,13 +2434,19 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Persona");
                 });
 
-            modelBuilder.Entity("BenitezLabs.Domain.Entities.FotoPersona", b =>
+            modelBuilder.Entity("BenitezLabs.Domain.Entities.Foto", b =>
                 {
+                    b.HasOne("BenitezLabs.Domain.Entities.Empadronamientos.Empadronamiento", "Empadronamiento")
+                        .WithMany()
+                        .HasForeignKey("IdEmpadronamiento")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("BenitezLabs.Domain.Entities.Persona", "Persona")
                         .WithMany("Fotos")
-                        .HasForeignKey("PersonaId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("IdPersona")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Empadronamiento");
 
                     b.Navigation("Persona");
                 });
@@ -1814,25 +2531,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Role");
                 });
 
-            modelBuilder.Entity("BenitezLabs.Domain.Entities.RostroPersona", b =>
-                {
-                    b.HasOne("BenitezLabs.Domain.Entities.Organizacion", "Organizacion")
-                        .WithMany()
-                        .HasForeignKey("OrganizacionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("BenitezLabs.Domain.Entities.Persona", "Persona")
-                        .WithMany("Rostros")
-                        .HasForeignKey("PersonaId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Organizacion");
-
-                    b.Navigation("Persona");
-                });
-
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Usuario", b =>
                 {
                     b.HasOne("BenitezLabs.Domain.Entities.Organizacion", "Organizacion")
@@ -1889,6 +2587,8 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Persona", b =>
                 {
+                    b.Navigation("Caras");
+
                     b.Navigation("Direcciones");
 
                     b.Navigation("Empadronamientos");
@@ -1898,8 +2598,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Fotos");
 
                     b.Navigation("RedesSociales");
-
-                    b.Navigation("Rostros");
                 });
 
             modelBuilder.Entity("BenitezLabs.Domain.Entities.Role", b =>

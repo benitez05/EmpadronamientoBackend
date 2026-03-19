@@ -35,19 +35,9 @@ public class Persona : AuditoriaEntidad
 
     public string? Nacionalidad { get; set; }
 
-    /// <summary>
-    /// Estado civil (Catálogo).
-    /// </summary>
-    public int? EstadoCivilId { get; set; }
+    public string? EstadoCivil { get; set; }
 
-    public string? EstadoCivilNombre { get; set; }
-
-    /// <summary>
-    /// Escolaridad (Catálogo).
-    /// </summary>
-    public int? EscolaridadId { get; set; }
-
-    public string? EscolaridadNombre { get; set; }
+    public string? Escolaridad { get; set; }
 
     public string? OficioProfesion { get; set; }
 
@@ -58,13 +48,13 @@ public class Persona : AuditoriaEntidad
     /// <summary>
     /// Rostros registrados para la persona.
     /// </summary>
-    public virtual ICollection<RostroPersona> Rostros { get; set; } = new List<RostroPersona>();
+    public virtual ICollection<Cara> Caras { get; set; } = new List<Cara>();
 
     public virtual Organizacion Organizacion { get; set; } = null!;
 
     public virtual ICollection<DireccionPersona> Direcciones { get; set; } = new List<DireccionPersona>();
 
-    public virtual ICollection<FotoPersona> Fotos { get; set; } = new List<FotoPersona>();
+    public virtual ICollection<Foto> Fotos { get; set; } = new List<Foto>();
 
     public virtual ICollection<RedSocial> RedesSociales { get; set; } = new List<RedSocial>();
 

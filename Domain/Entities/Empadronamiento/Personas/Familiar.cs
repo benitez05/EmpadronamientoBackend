@@ -11,9 +11,7 @@ public class Familiar : AuditoriaEntidad
 
     public string NombreCompleto { get; set; } = string.Empty;
 
-    public int? ParentescoId { get; set; }
-
-    public string? ParentescoNombre { get; set; }
+    public string? Parentesco { get; set; }
 
     public string? Telefono { get; set; }
 

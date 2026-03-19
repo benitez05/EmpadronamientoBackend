@@ -29,15 +29,11 @@ public class Empadronamiento : AuditoriaEntidad
     /// </summary>
     public string? Folio { get; set; }
 
-    /// <summary>
-    /// Número CRP del operativo.
-    /// </summary>
-    public string? CRPId { get; set; }
 
      /// <summary>
     /// Número CRP del operativo.
     /// </summary>
-    public int? CRPNombre { get; set; }
+    public string? CRP { get; set; }
 
     /// <summary>
     /// Narrativa de los hechos registrados por el agente.

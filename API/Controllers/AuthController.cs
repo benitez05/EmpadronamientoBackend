@@ -44,7 +44,7 @@ public class AuthController : BaseController
         if (await _context.Usuarios.IgnoreQueryFilters().AnyAsync(u => u.Correo == request.Correo))
             return Error("Ya existe una cuenta asociada a este correo electrónico.");
 
-        var orgId = _currentUser.OrganizacionId ?? 0;
+        var orgId = _currentUser.OrganizacionId ;
         if (orgId == 0) return Error("No se pudo determinar tu organización.");
 
         // 2. VALIDACIÓN DEL ROL: ¿Existe y pertenece a mi empresa?

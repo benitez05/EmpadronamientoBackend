@@ -20,8 +20,6 @@ public class DireccionPersonaConfiguration : IEntityTypeConfiguration<DireccionP
         builder.Property(x => x.Estado).HasMaxLength(150);
         builder.Property(x => x.Pais).HasMaxLength(150);
         builder.Property(x => x.Referencia).HasMaxLength(500);
-        builder.Property(x => x.ImagenUrl).HasMaxLength(500);
-
         builder.HasOne(x => x.Persona)
             .WithMany(p => p.Direcciones)
             .HasForeignKey(x => x.PersonaId);

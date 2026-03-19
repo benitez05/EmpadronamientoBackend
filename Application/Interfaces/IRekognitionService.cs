@@ -1,36 +1,54 @@
 using System.IO;
 using System.Threading.Tasks;
+using EmpadronamientoBackend.Application.DTOs.Responses;
 
-namespace EmpadronamientoBackend.Application.Interfaces
+namespace EmpadronamientoBackend.Application.Interfaces;
+
+/// <summary>
+/// Contrato para operaciones de reconocimiento facial.
+/// </summary>
+public interface IRekognitionService
 {
     /// <summary>
-    /// Contrato para operaciones de reconocimiento facial.
+    /// Valida que la imagen cumpla con reglas de rostro:
+    /// - Exactamente un rostro
+    /// - Ojos abiertos
+    /// - Rostro no obstruido
     /// </summary>
-    public interface IRekognitionService
-    {
-        /// <summary>
-        /// Indexa un rostro en una colección.
-        /// </summary>
-        Task<string?> IndexFaceAsync(Stream imageStream, string collectionId, string externalImageId);
+    /// <param name="imageStream">Stream de la imagen a validar</param>
+    /// <returns>
+    /// Resultado de la validación con estado y mensaje de error en caso de fallo
+    /// </returns>
+    Task<FaceValidationResult> ValidateFaceAsync(Stream imageStream);
 
-        /// <summary>
-        /// Busca coincidencias en una colección usando una imagen.
-        /// </summary>
-        Task<string?> SearchFaceAsync(Stream imageStream, string collectionId);
+    Task<IndexFaceResult> IndexFaceAndGetDetailsAsync(
+        string bucketName,
+        string fileName,
+        string collectionId,
+        string externalImageId);
 
-        /// <summary>
-        /// Analiza atributos faciales (edad, emociones, etc).
-        /// </summary>
-        Task<object?> AnalyzeFaceAsync(Stream imageStream);
+    /// <summary>
+    /// Indexa un rostro en una colección.
+    /// </summary>
+    Task<string?> IndexFaceAsync(Stream imageStream, string collectionId, string externalImageId);
 
-        /// <summary>
-        /// Compara dos imágenes para determinar similitud facial.
-        /// </summary>
-        Task<float?> CompareFacesAsync(Stream sourceImage, Stream targetImage);
+    /// <summary>
+    /// Busca coincidencias en una colección usando una imagen.
+    /// </summary>
+    Task<string?> SearchFaceAsync(Stream imageStream, string collectionId);
 
-        /// <summary>
-        /// Elimina un rostro de una colección.
-        /// </summary>
-        Task DeleteFaceAsync(string collectionId, string faceId);
-    }
+    /// <summary>
+    /// Analiza atributos faciales (edad, emociones, etc).
+    /// </summary>
+    Task<object?> AnalyzeFaceAsync(Stream imageStream);
+
+    /// <summary>
+    /// Compara dos imágenes para determinar similitud facial.
+    /// </summary>
+    Task<float?> CompareFacesAsync(Stream sourceImage, Stream targetImage);
+
+    /// <summary>
+    /// Elimina un rostro de una colección.
+    /// </summary>
+    Task DeleteFaceAsync(string collectionId, string faceId);
 }

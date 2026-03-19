@@ -18,10 +18,19 @@ public class ModuloConfiguration : IEntityTypeConfiguration<Modulo>
 
         builder.Property(m => m.K)
             .IsRequired()
-            .HasMaxLength(10); // Super corto para el JWT
+            .HasMaxLength(10); 
 
         builder.HasIndex(m => m.K)
             .IsUnique();
 
+        // --- CONFIGURACIÓN DEL COLOR ---
+        builder.Property(m => m.Color)
+            .IsRequired()
+            .HasMaxLength(7) // Para guardar "#FFFFFF"
+            .HasDefaultValue("#3B82F6"); // Azul por defecto (Tailwind Blue 500)
+
+        // --- CONFIGURACIÓN DEL ICONO ---
+        builder.Property(m => m.Icono)
+            .HasMaxLength(50); // Para nombres de Material Icons o FontAwesome
     }
 }

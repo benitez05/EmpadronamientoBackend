@@ -23,24 +23,22 @@ public class CurrentUserService : ICurrentUserService
 
     public bool IsAuthenticated => _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
 
-    // --- EL CAMBIO CRUCIAL PARA EL FILTRO GLOBAL ---
-
     public int Tipo 
     {
         get
         {
-            // Buscamos el claim "tipo" que metimos en el PasswordService
             var tipoClaim = _httpContextAccessor.HttpContext?.User?.FindFirstValue("tipo");
-            return int.TryParse(tipoClaim, out var t) ? t : 0; // 0 si no hay token (ej. al migrar)
+            return int.TryParse(tipoClaim, out var t) ? t : 0;
         }
     }
 
-    public int? OrganizacionId 
+    public int OrganizacionId 
     {
         get
         {
             var orgClaim = _httpContextAccessor.HttpContext?.User?.FindFirstValue("OrganizacionId");
-            return int.TryParse(orgClaim, out var id) ? id : null;
+            // Si no hay claim, devolvemos 0 para que no truene la interfaz
+            return int.TryParse(orgClaim, out var id) ? id : 0;
         }
     }
 

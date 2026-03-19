@@ -34,11 +34,6 @@ public class DireccionPersona : AuditoriaEntidad
 
     public decimal? Longitud { get; set; }
 
-    /// <summary>
-    /// Imagen del domicilio
-    /// </summary>
-    public string? ImagenUrl { get; set; }
-
     public bool EsPrincipal { get; set; }
 
     public int PersonaId { get; set; }

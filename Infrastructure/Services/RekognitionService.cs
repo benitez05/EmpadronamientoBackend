@@ -1,9 +1,11 @@
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
 using EmpadronamientoBackend.Application.Interfaces;
+using EmpadronamientoBackend.Application.DTOs.Responses;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.Json;
 
 namespace EmpadronamientoBackend.Infrastructure.Services
 {
@@ -17,6 +19,29 @@ namespace EmpadronamientoBackend.Infrastructure.Services
         public RekognitionService(IAmazonRekognition rekognitionClient)
         {
             _rekognitionClient = rekognitionClient;
+        }
+
+        // Agrega este método a IRekognitionService y RekognitionService
+        public async Task<string?> IndexFaceFromS3Async(string bucketName, string fileName, string collectionId, string externalImageId)
+        {
+            var request = new IndexFacesRequest
+            {
+                CollectionId = collectionId,
+                ExternalImageId = externalImageId,
+                Image = new Amazon.Rekognition.Model.Image
+                {
+                    S3Object = new Amazon.Rekognition.Model.S3Object
+                    {
+                        Bucket = bucketName,
+                        Name = fileName
+                    }
+                },
+                MaxFaces = 1,
+                QualityFilter = QualityFilter.AUTO
+            };
+
+            var response = await _rekognitionClient.IndexFacesAsync(request);
+            return response.FaceRecords.FirstOrDefault()?.Face?.FaceId;
         }
 
         /// <summary>
@@ -42,6 +67,54 @@ namespace EmpadronamientoBackend.Infrastructure.Services
             return response.FaceRecords.FirstOrDefault()?.Face?.FaceId;
         }
 
+        public async Task<IndexFaceResult> IndexFaceAndGetDetailsAsync(
+    string bucketName,
+    string fileName,
+    string collectionId,
+    string externalImageId)
+        {
+            var resultado = new IndexFaceResult();
+
+            var request = new IndexFacesRequest
+            {
+                CollectionId = collectionId,
+                ExternalImageId = externalImageId,
+                Image = new Amazon.Rekognition.Model.Image
+                {
+                    S3Object = new Amazon.Rekognition.Model.S3Object
+                    {
+                        Bucket = bucketName,
+                        Name = fileName
+                    }
+                },
+                MaxFaces = 1,
+                QualityFilter = QualityFilter.AUTO
+            };
+
+            var response = await _rekognitionClient.IndexFacesAsync(request);
+            var faceRecord = response.FaceRecords.FirstOrDefault();
+
+            if (faceRecord?.Face != null)
+            {
+                resultado.FaceId = faceRecord.Face.FaceId;
+                resultado.Confidence = faceRecord.Face.Confidence;
+
+                if (faceRecord.Face.BoundingBox != null)
+                {
+                    var box = faceRecord.Face.BoundingBox;
+                    resultado.BoundingBoxJson = JsonSerializer.Serialize(new
+                    {
+                        Width = box.Width,
+                        Height = box.Height,
+                        Left = box.Left,
+                        Top = box.Top
+                    });
+                }
+            }
+
+            return resultado;
+        }
+
         /// <summary>
         /// Busca coincidencias en la colección.
         /// Devuelve el ExternalImageId asociado.
@@ -62,6 +135,70 @@ namespace EmpadronamientoBackend.Infrastructure.Services
             var response = await _rekognitionClient.SearchFacesByImageAsync(request);
 
             return response.FaceMatches.FirstOrDefault()?.Face?.ExternalImageId;
+        }
+
+        public async Task<FaceValidationResult> ValidateFaceAsync(Stream imageStream)
+        {
+            using var ms = new MemoryStream();
+            await imageStream.CopyToAsync(ms);
+            ms.Position = 0;
+
+            var request = new DetectFacesRequest
+            {
+                Image = new Amazon.Rekognition.Model.Image
+                {
+                    Bytes = ms
+                },
+                Attributes = new List<string> { "ALL" } // 🔥 NECESARIO
+            };
+
+            var response = await _rekognitionClient.DetectFacesAsync(request);
+
+            // ❌ No hay caras
+            if (response.FaceDetails == null || !response.FaceDetails.Any())
+            {
+                return new FaceValidationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = "No se detectó ningún rostro en la imagen."
+                };
+            }
+
+            // ❌ Más de una cara
+            if (response.FaceDetails.Count > 1)
+            {
+                return new FaceValidationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = "Se detectaron múltiples rostros. Solo se permite uno."
+                };
+            }
+
+            var face = response.FaceDetails.First();
+
+            if (face.EyesOpen == null || face.EyesOpen.Value == false || face.EyesOpen.Confidence < 80)
+            {
+                return new FaceValidationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = "Los ojos deben estar abiertos."
+                };
+            }
+
+            if (face.FaceOccluded?.Value == true && face.FaceOccluded.Confidence > 80)
+            {
+                return new FaceValidationResult
+                {
+                    IsValid = false,
+                    ErrorMessage = "El rostro está obstruido (cubierto parcialmente)."
+                };
+            }
+
+            // ✅ Todo OK
+            return new FaceValidationResult
+            {
+                IsValid = true
+            };
         }
 
         /// <summary>
@@ -129,5 +266,7 @@ namespace EmpadronamientoBackend.Infrastructure.Services
             stream.CopyTo(ms);
             return ms.ToArray();
         }
+
+
     }
 }

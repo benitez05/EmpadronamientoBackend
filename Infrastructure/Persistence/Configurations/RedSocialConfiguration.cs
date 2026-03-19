@@ -19,7 +19,7 @@ public class RedSocialConfiguration : IEntityTypeConfiguration<RedSocial>
         builder.Property(x => x.UrlPerfil)
             .HasMaxLength(500);
 
-        builder.Property(x => x.TipoRedSocialNombre)
+        builder.Property(x => x.TipoRedSocial)
             .HasMaxLength(100);
 
         builder.HasOne(x => x.Persona)

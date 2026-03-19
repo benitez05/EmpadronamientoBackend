@@ -19,7 +19,7 @@ public class EmpadronamientoConfiguration : IEntityTypeConfiguration<Empadronami
         builder.Property(x => x.Folio)
             .HasMaxLength(100);
 
-        builder.Property(x => x.CRPId)
+        builder.Property(x => x.CRP)
             .HasMaxLength(100);
 
         builder.HasOne(x => x.UsuarioResponsable)

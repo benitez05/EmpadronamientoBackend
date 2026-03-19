@@ -42,10 +42,11 @@ public class LugarEmpadronamiento : AuditoriaEntidad
     /// </summary>
     public decimal? Longitud { get; set; }
 
+    public int ImagenId { get; set; }
+
     /// <summary>
     /// Imagen del lugar de los hechos.
     /// </summary>
-    public string? ImagenUrl { get; set; }
 
     public int OrganizacionId { get; set; }
 

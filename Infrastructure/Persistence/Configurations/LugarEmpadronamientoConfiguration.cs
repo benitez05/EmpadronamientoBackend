@@ -19,7 +19,6 @@ public class LugarEmpadronamientoConfiguration : IEntityTypeConfiguration<LugarE
         builder.Property(x => x.Municipio).HasMaxLength(150);
         builder.Property(x => x.Estado).HasMaxLength(150);
         builder.Property(x => x.Referencia).HasMaxLength(500);
-        builder.Property(x => x.ImagenUrl).HasMaxLength(500);
 
         builder.HasOne(x => x.Organizacion)
             .WithMany()

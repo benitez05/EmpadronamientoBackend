@@ -7,6 +7,7 @@ using EmpadronamientoBackend.Application.DTOs.Responses;
 using EmpadronamientoBackend.Application.Interfaces;
 using EmpadronamientoBackend.Infrastructure.Persistence;
 using EmpadronamientoBackend.Application.Mappers;
+using BenitezLabs.Domain.Entities.Catalogos;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
@@ -62,7 +63,9 @@ public class OrganizacionesController : BaseController
             {
                 string? logoPath = null;
 
-                // Subida opcional del logo
+                // =========================
+                // SUBIR LOGO
+                // =========================
                 if (request.Logo != null && request.Logo.Length > 0)
                 {
                     try
@@ -79,6 +82,9 @@ public class OrganizacionesController : BaseController
                     }
                 }
 
+                // =========================
+                // CREAR ORGANIZACIÓN
+                // =========================
                 var nuevaOrg = new Organizacion
                 {
                     Nombre = request.Nombre,
@@ -104,10 +110,17 @@ public class OrganizacionesController : BaseController
                 _context.Organizaciones.Add(nuevaOrg);
                 await _context.SaveChangesAsync();
 
-                // Activar módulos base
+                // =========================
+                // CREAR CATÁLOGOS FIJOS
+                // =========================
+                await CrearCatalogosBaseAsync(nuevaOrg.Id);
+
+                // =========================
+                // ACTIVAR MÓDULOS
+                // =========================
                 var modulosBase = await _context.Modulos
-               .Where(m => m.K == "u" || m.K == "r" || m.K == "o" || m.K == "c") // Usuarios, Roles, Organizaciones, Configuración
-               .ToListAsync();
+                    .Where(m => m.K == "u" || m.K == "r" || m.K == "o" || m.K == "c" || m.K == "e")
+                    .ToListAsync();
 
                 foreach (var m in modulosBase)
                 {
@@ -122,12 +135,14 @@ public class OrganizacionesController : BaseController
 
                 await _context.SaveChangesAsync();
 
-                // Crear roles base
+                // =========================
+                // CREAR ROLES
+                // =========================
                 var templates = new List<(string Nombre, int Nivel)>
                 {
-                    ("Administrador", 3),
-                    ("Editor", 2),
-                    ("Lectura", 1)
+                ("Administrador", 3),
+                ("Editor", 2),
+                ("Lectura", 1)
                 };
 
                 foreach (var t in templates)
@@ -153,6 +168,7 @@ public class OrganizacionesController : BaseController
                 }
 
                 await _context.SaveChangesAsync();
+
                 await transaction.CommitAsync();
 
                 return Result(nuevaOrg.Id, "Organización creada correctamente.");
@@ -232,5 +248,92 @@ public class OrganizacionesController : BaseController
         await _context.SaveChangesAsync();
 
         return Result(org.ToResponse(_s3Service), "Organización actualizada con éxito.");
+    }
+
+    private async Task CrearCatalogosBaseAsync(int orgId)
+    {
+        var sys = "SYSTEM";
+        var fechaSeed = DateTime.UtcNow;
+        var ip = "127.0.0.1";
+        var dev = "SEED";
+
+        var catalogos = new List<Catalogo>
+    {
+        new Catalogo { Clave = "TIPO_RED_SOCIAL", Nombre = "Tipo de Red Social", OrganizacionId = orgId },
+        new Catalogo { Clave = "ESTADO_CIVIL", Nombre = "Estado Civil", OrganizacionId = orgId },
+        new Catalogo { Clave = "ESCOLARIDAD", Nombre = "Escolaridad", OrganizacionId = orgId },
+        new Catalogo { Clave = "TIPO_FOTO", Nombre = "Tipo de Foto", OrganizacionId = orgId },
+        new Catalogo { Clave = "PARENTESCO", Nombre = "Parentesco", OrganizacionId = orgId },
+        new Catalogo { Clave = "TIPO_CARRO_RADIO_PATRULLA", Nombre = "Tipo Carro Radio Patrulla", OrganizacionId = orgId },
+        new Catalogo { Clave = "OFICIO_PROFESION", Nombre = "Oficio / Profesión", OrganizacionId = orgId }
+    };
+
+        _context.Catalogos.AddRange(catalogos);
+        await _context.SaveChangesAsync();
+
+        int GetId(string clave) => catalogos.First(c => c.Clave == clave).Id;
+
+        var items = new List<CatalogoItem>
+    {
+        // ================= RED SOCIAL =================
+        new CatalogoItem { Nombre = "Facebook", Codigo = "FACEBOOK", Orden = 1, CatalogoId = GetId("TIPO_RED_SOCIAL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Instagram", Codigo = "INSTAGRAM", Orden = 2, CatalogoId = GetId("TIPO_RED_SOCIAL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "X (Twitter)", Codigo = "X", Orden = 3, CatalogoId = GetId("TIPO_RED_SOCIAL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "TikTok", Codigo = "TIKTOK", Orden = 4, CatalogoId = GetId("TIPO_RED_SOCIAL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "WhatsApp", Codigo = "WHATSAPP", Orden = 5, CatalogoId = GetId("TIPO_RED_SOCIAL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Telegram", Codigo = "TELEGRAM", Orden = 6, CatalogoId = GetId("TIPO_RED_SOCIAL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+
+        // ================= ESTADO CIVIL =================
+        new CatalogoItem { Nombre = "Soltero", Codigo = "SOLTERO", Orden = 1, CatalogoId = GetId("ESTADO_CIVIL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Casado", Codigo = "CASADO", Orden = 2, CatalogoId = GetId("ESTADO_CIVIL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Divorciado", Codigo = "DIVORCIADO", Orden = 3, CatalogoId = GetId("ESTADO_CIVIL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Unión Libre", Codigo = "UNION_LIBRE", Orden = 4, CatalogoId = GetId("ESTADO_CIVIL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Viudo", Codigo = "VIUDO", Orden = 5, CatalogoId = GetId("ESTADO_CIVIL"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+
+        // ================= ESCOLARIDAD =================
+        new CatalogoItem { Nombre = "Sin estudios", Codigo = "SIN_ESTUDIOS", Orden = 1, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Primaria", Codigo = "PRIMARIA", Orden = 2, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Secundaria", Codigo = "SECUNDARIA", Orden = 3, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Preparatoria", Codigo = "PREPARATORIA", Orden = 4, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Técnico", Codigo = "TECNICO", Orden = 5, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Licenciatura", Codigo = "LICENCIATURA", Orden = 6, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Maestría", Codigo = "MAESTRIA", Orden = 7, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Doctorado", Codigo = "DOCTORADO", Orden = 8, CatalogoId = GetId("ESCOLARIDAD"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+
+        // ================= TIPO FOTO =================
+        new CatalogoItem { Nombre = "Rostro", Codigo = "ROSTRO", Orden = 1, CatalogoId = GetId("TIPO_FOTO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Cuerpo Completo", Codigo = "CUERPO_COMPLETO", Orden = 2, CatalogoId = GetId("TIPO_FOTO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Identificación", Codigo = "IDENTIFICACION", Orden = 3, CatalogoId = GetId("TIPO_FOTO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Señas Particulares", Codigo = "SENAS", Orden = 4, CatalogoId = GetId("TIPO_FOTO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+
+        // ================= PARENTESCO =================
+        new CatalogoItem { Nombre = "Padre", Codigo = "PADRE", Orden = 1, CatalogoId = GetId("PARENTESCO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Madre", Codigo = "MADRE", Orden = 2, CatalogoId = GetId("PARENTESCO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Hermano(a)", Codigo = "HERMANO", Orden = 3, CatalogoId = GetId("PARENTESCO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Pareja", Codigo = "PAREJA", Orden = 4, CatalogoId = GetId("PARENTESCO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Hijo(a)", Codigo = "HIJO", Orden = 5, CatalogoId = GetId("PARENTESCO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Otro", Codigo = "OTRO", Orden = 6, CatalogoId = GetId("PARENTESCO"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+
+        // ================= PATRULLA =================
+        new CatalogoItem { Nombre = "Sedán", Codigo = "SEDAN", Orden = 1, CatalogoId = GetId("TIPO_CARRO_RADIO_PATRULLA"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "PickUp", Codigo = "PICKUP", Orden = 2, CatalogoId = GetId("TIPO_CARRO_RADIO_PATRULLA"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Motocicleta", Codigo = "MOTO", Orden = 3, CatalogoId = GetId("TIPO_CARRO_RADIO_PATRULLA"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "SUV", Codigo = "SUV", Orden = 4, CatalogoId = GetId("TIPO_CARRO_RADIO_PATRULLA"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+
+        // ================= OFICIO =================
+        new CatalogoItem { Nombre = "Empleado", Codigo = "EMPLEADO", Orden = 1, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Obrero", Codigo = "OBRERO", Orden = 2, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Comerciante", Codigo = "COMERCIANTE", Orden = 3, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Estudiante", Codigo = "ESTUDIANTE", Orden = 4, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Desempleado", Codigo = "DESEMPLEADO", Orden = 5, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Chofer", Codigo = "CHOFER", Orden = 6, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Albañil", Codigo = "ALBANIL", Orden = 7, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Técnico", Codigo = "TECNICO", Orden = 8, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Profesionista", Codigo = "PROFESIONISTA", Orden = 9, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
+        new CatalogoItem { Nombre = "Otro", Codigo = "OTRO", Orden = 10, CatalogoId = GetId("OFICIO_PROFESION"), OrganizacionId = orgId, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev }
+    };
+
+        _context.CatalogoItems.AddRange(items);
+        await _context.SaveChangesAsync();
     }
 }
