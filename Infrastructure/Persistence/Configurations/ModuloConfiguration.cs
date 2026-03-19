@@ -31,6 +31,6 @@ public class ModuloConfiguration : IEntityTypeConfiguration<Modulo>
 
         // --- CONFIGURACIÓN DEL ICONO ---
         builder.Property(m => m.Icono)
-            .HasMaxLength(50); // Para nombres de Material Icons o FontAwesome
+            .HasMaxLength(150); 
     }
 }

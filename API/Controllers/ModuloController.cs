@@ -54,7 +54,7 @@ public class ModulosController : BaseController
         
         if (request.IconoArchivo != null)
         {
-            var s3Key = $"Modulos/{Guid.NewGuid()}{Path.GetExtension(request.IconoArchivo.FileName)}";
+            var s3Key = $"Sistema/Modulos/{Guid.NewGuid()}{Path.GetExtension(request.IconoArchivo.FileName)}";
             await _s3Service.UploadImageAsync(request.IconoArchivo.OpenReadStream(), s3Key, request.IconoArchivo.ContentType);
             nuevoModulo.Icono = s3Key;
         }
