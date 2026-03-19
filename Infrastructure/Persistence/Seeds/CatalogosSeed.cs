@@ -12,7 +12,6 @@ public static class CatalogosSeed
             new Catalogo { Id = 1, Clave = "TIPO_RED_SOCIAL", Nombre = "Tipo de Red Social", Descripcion = "Redes sociales disponibles", OrganizacionId = 1, FechaCreacion = fechaSeed, CreadoPor = sys },
             new Catalogo { Id = 2, Clave = "ESTADO_CIVIL", Nombre = "Estado Civil", Descripcion = "Estado civil de la persona", OrganizacionId = 1, FechaCreacion = fechaSeed, CreadoPor = sys },
             new Catalogo { Id = 3, Clave = "ESCOLARIDAD", Nombre = "Escolaridad", Descripcion = "Nivel educativo", OrganizacionId = 1, FechaCreacion = fechaSeed, CreadoPor = sys },
-            new Catalogo { Id = 4, Clave = "TIPO_FOTO", Nombre = "Tipo de Foto", Descripcion = "Clasificación de fotografías", OrganizacionId = 1, FechaCreacion = fechaSeed, CreadoPor = sys },
             new Catalogo { Id = 5, Clave = "PARENTESCO", Nombre = "Parentesco", Descripcion = "Relación familiar", OrganizacionId = 1, FechaCreacion = fechaSeed, CreadoPor = sys },
             new Catalogo { Id = 6, Clave = "TIPO_CARRO_RADIO_PATRULLA", Nombre = "Tipo Carro Radio Patrulla", Descripcion = "Tipos de unidades", OrganizacionId = 1, FechaCreacion = fechaSeed, CreadoPor = sys },
             new Catalogo { Id = 7, Clave = "OFICIO_PROFESION", Nombre = "Oficio / Profesión", Descripcion = "Ocupación de la persona", OrganizacionId = 1, FechaCreacion = fechaSeed, CreadoPor = sys }
@@ -53,14 +52,6 @@ public static class CatalogosSeed
             new CatalogoItem { Id = 25, Nombre = "Licenciatura", Codigo = "LICENCIATURA", Orden = 6, CatalogoId = 3, OrganizacionId = 1, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
             new CatalogoItem { Id = 26, Nombre = "Maestría", Codigo = "MAESTRIA", Orden = 7, CatalogoId = 3, OrganizacionId = 1, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
             new CatalogoItem { Id = 27, Nombre = "Doctorado", Codigo = "DOCTORADO", Orden = 8, CatalogoId = 3, OrganizacionId = 1, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
-
-            // =====================
-            // TIPO FOTO
-            // =====================
-            new CatalogoItem { Id = 30, Nombre = "Rostro", Codigo = "ROSTRO", Orden = 1, CatalogoId = 4, OrganizacionId = 1, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
-            new CatalogoItem { Id = 31, Nombre = "Cuerpo Completo", Codigo = "CUERPO_COMPLETO", Orden = 2, CatalogoId = 4, OrganizacionId = 1, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
-            new CatalogoItem { Id = 32, Nombre = "Identificación", Codigo = "IDENTIFICACION", Orden = 3, CatalogoId = 4, OrganizacionId = 1, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
-            new CatalogoItem { Id = 33, Nombre = "Señas Particulares", Codigo = "SENAS", Orden = 4, CatalogoId = 4, OrganizacionId = 1, CreadoPor = sys, FechaCreacion = fechaSeed, IpCreacion = ip, DispositivoCreacion = dev },
 
             // =====================
             // PARENTESCO
