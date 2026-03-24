@@ -14,7 +14,8 @@ public static class ModulosSeed
             new Modulo { Id = 4, Nombre = "Configuración", K = "c" },
             new Modulo { Id = 5, Nombre = "Empadronamiento", K = "e" },
             new Modulo { Id = 6, Nombre = "Busqueda", K = "b" },
-            new Modulo { Id = 7, Nombre = "Estadisticas", K = "t" }
+            new Modulo { Id = 7, Nombre = "Estadisticas", K = "t" },
+            new Modulo { Id = 8, Nombre = "Modulo", K = "m" }
         );
 
         modelBuilder.Entity<OrganizacionModulo>().HasData(
@@ -24,7 +25,8 @@ public static class ModulosSeed
             new OrganizacionModulo { OrganizacionId = 1, ModuloId = 4, Activo = true, FechaActivacion = fecha, CreadoPor = sys, FechaCreacion = fecha, IpCreacion = ip, DispositivoCreacion = dev },
             new OrganizacionModulo { OrganizacionId = 1, ModuloId = 5, Activo = true, FechaActivacion = fecha, CreadoPor = sys, FechaCreacion = fecha, IpCreacion = ip, DispositivoCreacion = dev },
             new OrganizacionModulo { OrganizacionId = 1, ModuloId = 6, Activo = true, FechaActivacion = fecha, CreadoPor = sys, FechaCreacion = fecha, IpCreacion = ip, DispositivoCreacion = dev },
-            new OrganizacionModulo { OrganizacionId = 1, ModuloId = 7, Activo = true, FechaActivacion = fecha, CreadoPor = sys, FechaCreacion = fecha, IpCreacion = ip, DispositivoCreacion = dev }
+            new OrganizacionModulo { OrganizacionId = 1, ModuloId = 7, Activo = true, FechaActivacion = fecha, CreadoPor = sys, FechaCreacion = fecha, IpCreacion = ip, DispositivoCreacion = dev },
+             new OrganizacionModulo { OrganizacionId = 1, ModuloId = 8, Activo = true, FechaActivacion = fecha, CreadoPor = sys, FechaCreacion = fecha, IpCreacion = ip, DispositivoCreacion = dev }
         );
     }
 }

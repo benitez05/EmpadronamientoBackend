@@ -29,6 +29,10 @@ public class Usuario : AuditoriaEntidad // <--- Heredamos toda la auditoría pro
     public DateTime? BloqueadoHasta { get; set; }
     public DateTime? UltimoLogin { get; set; }
 
+    // --- SEGURIDAD 2FA (TOTP) ---
+    public bool DosPasosHabilitado { get; set; } = false;
+    public string? DosPasosSecretKey { get; set; }
+
     // --- ESTADO ---
     public bool Activo { get; set; } = true;
     // Quitamos FechaCreacion y FechaActualizacion porque ya vienen en AuditoriaEntidad

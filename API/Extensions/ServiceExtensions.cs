@@ -13,6 +13,7 @@ using System.IdentityModel.Tokens.Jwt;
 using Amazon.S3;
 using Amazon.Rekognition;
 using Amazon.Extensions.NETCore.Setup;
+using Resend; // <-- NUEVO: Agregado para poder usar ResendClientOptions y AddResend
 
 using EmpadronamientoBackend.API.Filters;
 using EmpadronamientoBackend.Infrastructure.Identity;
@@ -254,6 +255,19 @@ public static class ServiceExtensions
         // Servicios de infraestructura
         services.AddScoped<IS3Service, S3Service>();
         services.AddScoped<IRekognitionService, RekognitionService>();
+        services.AddScoped<ITwoFactorService, TwoFactorService>();
+
+
+        // 8. CONFIGURACIÓN RESEND (CORREOS) 
+
+        // 8.1 Cargamos la configuración del appsettings.json
+        services.Configure<ResendClientOptions>(configuration.GetSection("Resend"));
+
+        // 8.2 Registramos el cliente de Resend de forma manual (esto reemplaza el AddResend mágico)
+        services.AddHttpClient<IResend, ResendClient>();
+
+        // 8.3 Registramos nuestra propia interfaz e implementación de correos
+        services.AddScoped<IEmailService, ResendEmailService>();
 
 
         return services;
