@@ -35,6 +35,7 @@ public class ModulosController : BaseController
               .OrderBy(m => m.Nombre)
               .ToListAsync();
 
+        // El mapper ToResponseList internamente usará s3Service.GetFileUrl
         return Result(modulos.ToResponseList(_s3Service), "Módulos recuperados exitosamente.");
     }
 
@@ -54,9 +55,14 @@ public class ModulosController : BaseController
         
         if (request.IconoArchivo != null)
         {
-            var s3Key = $"Sistema/Modulos/{Guid.NewGuid()}{Path.GetExtension(request.IconoArchivo.FileName)}";
-            await _s3Service.UploadImageAsync(request.IconoArchivo.OpenReadStream(), s3Key, request.IconoArchivo.ContentType);
-            nuevoModulo.Icono = s3Key;
+            // 1. Definimos la subcarpeta funcional del sistema
+            var pathSugerido = $"Sistema/Modulos/{Guid.NewGuid()}{Path.GetExtension(request.IconoArchivo.FileName)}";
+            
+            // 2. El servicio le clava el "dev/" o "prod/" y nos regresa la ruta completa (ej: dev/Sistema/Modulos/uuid.png)
+            var keyFinal = await _s3Service.UploadImageAsync(request.IconoArchivo.OpenReadStream(), pathSugerido, request.IconoArchivo.ContentType);
+            
+            // 3. Guardamos la KEY COMPLETA en la base de datos
+            nuevoModulo.Icono = keyFinal;
         }
 
         _context.Modulos.Add(nuevoModulo);
@@ -86,9 +92,18 @@ public class ModulosController : BaseController
 
         if (request.IconoArchivo != null)
         {
-            var s3Key = $"Sistema/Modulos/{Guid.NewGuid()}{Path.GetExtension(request.IconoArchivo.FileName)}";
-            await _s3Service.UploadImageAsync(request.IconoArchivo.OpenReadStream(), s3Key, request.IconoArchivo.ContentType);
-            modulo.Icono = s3Key;
+            // Eliminamos el icono anterior si existía (opcional, pero recomendado para no llenar de basura S3)
+            if (!string.IsNullOrEmpty(modulo.Icono))
+            {
+                await _s3Service.DeleteImageAsync(modulo.Icono);
+            }
+
+            var pathSugerido = $"Sistema/Modulos/{Guid.NewGuid()}{Path.GetExtension(request.IconoArchivo.FileName)}";
+            
+            // Subimos y obtenemos la key con el prefijo de entorno
+            var keyFinal = await _s3Service.UploadImageAsync(request.IconoArchivo.OpenReadStream(), pathSugerido, request.IconoArchivo.ContentType);
+            
+            modulo.Icono = keyFinal;
         }
 
         await _context.SaveChangesAsync();
@@ -109,6 +124,12 @@ public class ModulosController : BaseController
         var tieneDependencias = await _context.RolesPermisos.AnyAsync(rp => rp.ModuloId == id);
         if (tieneDependencias)
             return Error("No se puede eliminar: existen roles con permisos asignados.");
+
+        // Eliminamos el icono de S3 antes de borrar el registro
+        if (!string.IsNullOrEmpty(modulo.Icono))
+        {
+            await _s3Service.DeleteImageAsync(modulo.Icono);
+        }
 
         _context.Modulos.Remove(modulo);
         await _context.SaveChangesAsync();

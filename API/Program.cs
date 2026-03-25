@@ -7,10 +7,12 @@ using Microsoft.OpenApi.Models;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Scalar.AspNetCore;
-using System.IdentityModel.Tokens.Jwt; // <--- AGREGAR ESTO
+using System.IdentityModel.Tokens.Jwt;
+// 🔥 USINGS PARA AWS
+using Amazon.Rekognition;
+using Amazon.Rekognition.Model;
 
-// 🔥 PASO 1: LIMPIEZA ABSOLUTA DE MAPEOS DE MICROSOFT
-// Esto va antes de cualquier otra cosa para que no te salgan los links largos
+// 1. Limpieza de mapeos de JWT
 JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 JwtSecurityTokenHandler.DefaultOutboundClaimTypeMap.Clear();
 
@@ -36,13 +38,10 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<ValidationFilter>();
 });
 
-// Ya no necesitas AddEndpointsApiExplorer con .NET 9 y AddOpenApi, pero lo dejamos si gustas.
-
 builder.Services.AddOpenApi(options =>
 {
     options.AddDocumentTransformer((document, context, cancellationToken) =>
     {
-        // Personalizamos el título que verás en Scalar
         document.Info.Title = "BenitezLabs - Sistema de Empadronamiento";
         document.Info.Description = "API de alto rendimiento para gestión de usuarios y permisos.";
         
@@ -51,11 +50,6 @@ builder.Services.AddOpenApi(options =>
             new OpenApiServer { Url = "http://143.198.231.51:5000", Description = "DigitalOcean (Producción)" },
             new OpenApiServer { Url = "http://localhost:5034", Description = "Local (Desarrollo)" }
         };
-        return Task.CompletedTask;
-    });
-
-    options.AddOperationTransformer((operation, context, cancellationToken) =>
-    {
         return Task.CompletedTask;
     });
 });
@@ -70,6 +64,49 @@ builder.Services.AddApiTemplate(builder.Configuration);
 
 var app = builder.Build();
 
+// =================================================================
+// 🔥 AUTO-VERIFICADOR DE REKOGNITION (Solo Empadronamiento) 🔥
+// =================================================================
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try 
+    {
+        var rekognitionClient = scope.ServiceProvider.GetRequiredService<IAmazonRekognition>();
+        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        
+        // Lee la colección (Empadronamiento-Dev o Empadronamiento-Prod)
+        var collectionId = config["AWS:Rekognition:Collections:Empadronamiento"];
+
+        if (!string.IsNullOrEmpty(collectionId))
+        {
+            try
+            {
+                await rekognitionClient.DescribeCollectionAsync(new DescribeCollectionRequest 
+                { 
+                    CollectionId = collectionId 
+                });
+                logger.LogInformation("[AWS] Colección de Empadronamiento '{CollectionId}' verificada y activa.", collectionId);
+            }
+            catch (ResourceNotFoundException)
+            {
+                logger.LogWarning("[AWS] La colección '{CollectionId}' no existe. Creándola ahora...", collectionId);
+                await rekognitionClient.CreateCollectionAsync(new CreateCollectionRequest 
+                { 
+                    CollectionId = collectionId 
+                });
+                logger.LogInformation("[AWS] ¡Colección '{CollectionId}' creada exitosamente!", collectionId);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        // Si AWS no responde, logueamos el error pero permitimos que la API inicie
+        logger.LogError(ex, "[AWS] Error crítico al inicializar Rekognition.");
+    }
+}
+// =================================================================
+
 #region -------------------------------------------------- PIPELINE
 
 app.UseMiddleware<ExceptionMiddleware>();
@@ -77,7 +114,6 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 
 app.UseCors("AllowLocalScalar");
 
-// 🔥 PASO 2: MAPEO DE OPENAPI (Sácalo del IF para que el dev vea el JSON en el server)
 app.MapOpenApi(); 
 
 if (app.Environment.IsDevelopment())

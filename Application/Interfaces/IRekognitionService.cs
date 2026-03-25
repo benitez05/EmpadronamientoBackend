@@ -32,10 +32,11 @@ public interface IRekognitionService
     /// </summary>
     Task<string?> IndexFaceAsync(Stream imageStream, string collectionId, string externalImageId);
 
-    /// <summary>
-    /// Busca coincidencias en una colección usando una imagen.
+    //// <summary>
+    /// Busca coincidencias en la colección y devuelve una lista de resultados con su similitud.
+    /// Ahora soporta múltiples rostros y umbral de confianza.
     /// </summary>
-    Task<string?> SearchFaceAsync(Stream imageStream, string collectionId);
+    Task<List<(string ExternalImageId, float Similarity)>> SearchFaceAsync(Stream imageStream, string collectionId, int maxFaces = 3);
 
     /// <summary>
     /// Analiza atributos faciales (edad, emociones, etc).

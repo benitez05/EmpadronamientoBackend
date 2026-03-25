@@ -2,39 +2,44 @@ using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.DTOs.Responses;
 using BenitezLabs.Domain.Entities;
 using EmpadronamientoBackend.Application.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace EmpadronamientoBackend.Application.Mappers;
 
 public static class UsuarioMapper
 {
     /// <summary>
-/// Convierte una entidad Usuario a un DTO de respuesta.
-/// Genera automáticamente la URL temporal si hay imagen.
-/// </summary>
-public static UsuarioResponse ToResponse(this Usuario u, IS3Service? s3Service = null)
-{
-    if (u == null) return null!;
-
-    // Función interna que genera URL temporal si se proporciona el servicio
-    Func<string?, string?> generateUrl = fileName =>
+    /// Convierte una entidad Usuario a un DTO de respuesta.
+    /// Genera la URL pública directa (sin firma) para mejor rendimiento.
+    /// </summary>
+    public static UsuarioResponse ToResponse(this Usuario u, IS3Service? s3Service = null)
     {
-        if (string.IsNullOrEmpty(fileName) || s3Service == null)
-            return fileName; // devuelve null o el nombre si no hay servicio
-        return s3Service.GetPreSignedUrl(fileName);
-    };
+        if (u == null) return null!;
 
-    return new UsuarioResponse
-    {
-        Id = u.Id,
-        Correo = u.Correo,
-        Nombre = u.Nombre,
-        Apellidos = u.Apellidos,
-        Celular = u.Celular,
-        Tipo = u.Tipo,
-        Rol = u.Role?.ToResponse(),
-        ImagenUrl = generateUrl(u.Imagen) // automáticamente genera la URL si hay imagen
-    };
-}
+        // Función interna que genera URL pública
+        string? GenerateUrl(string? fileName)
+        {
+            if (string.IsNullOrEmpty(fileName) || s3Service == null)
+                return fileName; 
+
+            // 🔥 Usamos GetFileUrl para que la URL sea estática y cacheable
+            return s3Service.GetFileUrl(fileName);
+        };
+
+        return new UsuarioResponse
+        {
+            Id = u.Id,
+            Correo = u.Correo,
+            Nombre = u.Nombre,
+            Apellidos = u.Apellidos,
+            Celular = u.Celular,
+            Tipo = u.Tipo,
+            // Mapeo del Rol (Asegúrate de tener el ToResponse en el mapper de Roles)
+            Rol = u.Role?.ToResponse(), 
+            ImagenUrl = GenerateUrl(u.Imagen) 
+        };
+    }
 
     /// <summary>
     /// Convierte un Request de Registro a una Entidad de Dominio.
@@ -58,8 +63,11 @@ public static UsuarioResponse ToResponse(this Usuario u, IS3Service? s3Service =
     /// <summary>
     /// Convierte una lista de entidades a una lista de respuestas.
     /// </summary>
-    public static IEnumerable<UsuarioResponse> ToResponseList(this IEnumerable<Usuario> usuarios)
+    public static IEnumerable<UsuarioResponse> ToResponseList(this IEnumerable<Usuario> usuarios, IS3Service? s3Service = null)
     {
-        return usuarios.Select(u => u.ToResponse());
+        if (usuarios == null) return Enumerable.Empty<UsuarioResponse>();
+        
+        // Pasamos el s3Service para generar las URLs públicas de toda la lista
+        return usuarios.Select(u => u.ToResponse(s3Service));
     }
 }

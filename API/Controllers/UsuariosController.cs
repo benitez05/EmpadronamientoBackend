@@ -7,7 +7,6 @@ using EmpadronamientoBackend.Application.DTOs.Requests;
 using EmpadronamientoBackend.Application.Interfaces;
 using EmpadronamientoBackend.Infrastructure.Persistence;
 using BenitezLabs.Domain.Entities;
-using EmpadronamientoBackend.Infrastructure.Services;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
@@ -50,7 +49,7 @@ public class UsuariosController : BaseController
                 s.DeviceInfo,
                 s.IpAddress,
                 s.FechaCreacion,
-                EsActual = s.Jti == currentJti // Comparamos con el JTI del Token actual
+                EsActual = s.Jti == currentJti
             })
             .ToListAsync();
 
@@ -63,7 +62,6 @@ public class UsuariosController : BaseController
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> Update(int id, [FromForm] UpdateUsuarioRequest request)
     {
-
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
         if (usuario == null)
         {
@@ -77,39 +75,44 @@ public class UsuariosController : BaseController
         {
             try
             {
-                var fileName = $"usuarios/{usuario.Id}_{DateTime.UtcNow.Ticks}_{request.Imagen.FileName}";
+                // 1. Definimos la subcarpeta funcional
+                // Ahora: usuarios / {orgId} / {archivo}
+                var pathSugerido = $"usuarios/{usuario.OrganizacionId}/{Guid.NewGuid()}{Path.GetExtension(request.Imagen.FileName)}";
                 using var stream = request.Imagen.OpenReadStream();
 
-                // ✅ Usar la instancia inyectada
-                var url = await _s3Service.UploadImageAsync(stream, fileName, request.Imagen.ContentType);
-                usuario.Imagen = fileName;
+                // 2. El servicio inyecta el prefijo (dev/prod) y nos da la ruta completa
+                var keyFinal = await _s3Service.UploadImageAsync(stream, pathSugerido, request.Imagen.ContentType);
 
-                 // Eliminar imagen anterior si existía
-            if (!string.IsNullOrEmpty(previousImage))
-            {
-                try
+                // 3. Guardamos la key final con prefijo en la BD
+                usuario.Imagen = keyFinal;
+
+                // Eliminar imagen anterior si existía
+                if (!string.IsNullOrEmpty(previousImage))
                 {
-                    await _s3Service.DeleteImageAsync(previousImage);
-                }
-                catch (Exception ex)
-                {
-                    // No interrumpimos la actualización por un fallo en eliminar la imagen anterior
+                    try
+                    {
+                        // Como previousImage ya tiene el prefijo, el servicio la encontrará sin problemas
+                        await _s3Service.DeleteImageAsync(previousImage);
+                    }
+                    catch (Exception)
+                    {
+                        // No interrumpimos la actualización por un fallo en eliminar la imagen anterior
+                    }
                 }
             }
-
-            }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return Error("No se pudo subir la imagen proporcionada.");
             }
         }
 
-        // Mapeo de campos permitidos
         usuario.Nombre = request.Nombre;
         usuario.Apellidos = request.Apellidos;
         usuario.Celular = request.Celular;
 
         await _context.SaveChangesAsync();
+
+        // El Mapper ToResponse usará s3Service.GetFileUrl internamente
         return Result(usuario.ToResponse(_s3Service), "Los datos del usuario han sido actualizados.");
     }
 
@@ -125,7 +128,6 @@ public class UsuariosController : BaseController
 
         if (sesion == null) return Error("Sesión no encontrada.");
 
-        // Invalidar el JTI en el Caché de inmediato usando el JTI de la sesión encontrada
         await _cacheService.SetAsync($"revoked_{sesion.Jti}", true, TimeSpan.FromHours(2));
 
         _context.UsuarioSesiones.Remove(sesion);
@@ -161,7 +163,8 @@ public class UsuariosController : BaseController
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        return Paged(usuarios.ToResponseList(), pagination, totalRecords, "Usuarios recuperados.");
+        // Enviamos s3Service para que las URLs de las fotos de la lista se generen bien
+        return Paged(usuarios.ToResponseList(_s3Service), pagination, totalRecords, "Usuarios recuperados.");
     }
 
     [HttpGet("{id}")]
@@ -175,75 +178,46 @@ public class UsuariosController : BaseController
 
         if (usuario == null) return Error("Usuario no encontrado.");
 
-        // Usamos el servicio inyectado para generar URL prefirmada
-        var response = usuario.ToResponse(_s3Service);
-
-        return Result(response, "Detalle del usuario recuperado.");
+        return Result(usuario.ToResponse(_s3Service), "Detalle del usuario recuperado.");
     }
 
     [HttpPut("{id}/role")]
-    [AuthLvl("u", 3)] // Nivel 3 en usuarios para poder cambiar roles
-    [EndpointSummary("Actualizar rol de un usuario")]
-    [EndpointDescription("Cambia el rol de un usuario. Solo se permiten roles que pertenezcan a la misma organización del usuario.")]
+    [AuthLvl("u", 3)]
     public async Task<IActionResult> UpdateRole(int id, [FromBody] UpdateRoleRequest request)
     {
-        // 1. Buscamos al usuario asegurándonos que sea de la misma Org que el admin logueado
-        // (A menos que sea Tipo 4, que tiene bypass)
-        // NOTA: El Global Query Filter ya aplica el filtrado por Org o el bypass de Tipo 4 automáticamente
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
         if (usuario == null) return Error("Usuario no encontrado o no pertenece a tu organización.");
 
-        // 2. Validamos que el NUEVO ROL también pertenezca a la misma organización
-        // NOTA: El Global Query Filter también protege la tabla Roles
         var rolValido = await _context.Roles.AnyAsync(r => r.Id == request.NewRoleId);
-
         if (!rolValido)
             return Error("El rol especificado no existe o no pertenece a la organización del usuario.");
 
-        // 3. Actualización
         usuario.RoleId = request.NewRoleId;
         await _context.SaveChangesAsync();
 
         return Result(true, $"El usuario {usuario.Nombre} ahora tiene un nuevo rol.");
     }
 
-    // DTO pequeño para el Body
     public record UpdateRoleRequest(int NewRoleId);
 
     [HttpPatch("{id}/status")]
-    [AuthLvl("u", 3)] // Nivel 3 para gestionar estados de cuenta
-    [EndpointSummary("Baneo / Activación de cuenta")]
-    [EndpointDescription("Alterna el estado activo/inactivo de un usuario. Un administrador no puede desactivar su propia cuenta.")]
+    [AuthLvl("u", 3)]
     public async Task<IActionResult> ToggleStatus(int id)
     {
-        // 1. Evitar el "auto-baneo"
-        // Si UserId es string, conviértelo a int
-        if (id == int.Parse(_currentUser.UserId))
+        if (id == int.Parse(_currentUser.UserId!))
         {
             return Error("No puedes desactivar tu propia cuenta.");
         }
 
-        // 2. Búsqueda con filtro de organización (Protección Multi-tenant)
-        // NOTA: El Global Query Filter ya aplica el filtrado por Org o el bypass de Tipo 4 automáticamente
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
+        if (usuario == null) return Error("Usuario no encontrado.");
 
-        if (usuario == null)
-            return Error("Usuario no encontrado.");
-
-        // 3. Cambio de estado
         usuario.Activo = !usuario.Activo;
-
-        // Al ser Patch y usar SaveChanges, AuditoriaEntidad registrará quién hizo el baneo
         await _context.SaveChangesAsync();
 
         string accion = usuario.Activo ? "activado" : "desactivado";
         return Result(usuario.Activo, $"El usuario {usuario.Nombre} ha sido {accion} correctamente.");
     }
-
-    #endregion
-
-    #region REPORTES Y ESTADÍSTICAS
-
 
     #endregion
 }

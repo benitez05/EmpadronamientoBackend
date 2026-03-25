@@ -38,11 +38,11 @@ public class EmpadronamientosController : BaseController
     }
 
     private static readonly List<string> TiposValidos = new()
-{
-    "Biométrico Facial", "Lugar / Escena", "Identificación (Frente)",
-    "Identificación (Reverso)", "Perfil Izquierdo", "Perfil Derecho",
-    "Tatuaje / Seña", "Vehículo", "Pertenencias", "Cuerpo Completo"
-};
+    {
+        "Biométrico Facial", "Lugar / Escena", "Identificación (Frente)",
+        "Identificación (Reverso)", "Perfil Izquierdo", "Perfil Derecho",
+        "Tatuaje / Seña", "Vehículo", "Pertenencias", "Cuerpo Completo"
+    };
 
     [HttpPost("validar")]
     [AuthLvl("e", 2)]
@@ -64,7 +64,6 @@ public class EmpadronamientosController : BaseController
         if (archivo == null || archivo.Length == 0)
             return Error("No se proporcionó un archivo válido.");
 
-        // --- NUEVA VALIDACIÓN: Solo acepta tipos del catálogo ---
         if (!TiposValidos.Contains(tipo, StringComparer.OrdinalIgnoreCase))
         {
             return Error($"El tipo de foto '{tipo}' no es válido. Usa: {string.Join(", ", TiposValidos)}", "INVALID_PHOTO_TYPE");
@@ -72,302 +71,265 @@ public class EmpadronamientosController : BaseController
 
         int organizacionId = _currentUser.OrganizacionId;
 
-        // --- SE ACTUALIZÓ EL NOMBRE A "Biométrico Facial" ---
         if (tipo.Equals("Biométrico Facial", StringComparison.OrdinalIgnoreCase))
         {
             var validation = await _rekognitionService.ValidateFaceAsync(archivo.OpenReadStream());
             if (!validation.IsValid) return Error(validation.ErrorMessage);
         }
 
-        var s3Key = $"Fotos/{organizacionId}/{Guid.NewGuid()}{Path.GetExtension(archivo.FileName)}";
-        await _s3Service.UploadImageAsync(archivo.OpenReadStream(), s3Key, archivo.ContentType);
+        // --- NUEVA LÓGICA DE PREFIJOS ---
+        // Definimos la subcarpeta funcional
+        var pathSugerido = $"Fotos/{organizacionId}/{Guid.NewGuid()}{Path.GetExtension(archivo.FileName)}";
+        
+        // El servicio inyecta dev/ o prod/ y nos regresa la key completa con prefijo
+        var keyFinal = await _s3Service.UploadImageAsync(archivo.OpenReadStream(), pathSugerido, archivo.ContentType);
 
         var foto = new Foto
         {
             OrganizacionId = organizacionId,
-            S3Key = s3Key,
-            Tipo = tipo, // Ya está validado que pertenece al catálogo
+            S3Key = keyFinal, // Guardamos la ruta real (ej: dev/Fotos/...)
+            Tipo = tipo,
             Descripcion = $"Subida individual: {tipo}"
         };
 
         _context.Fotos.Add(foto);
         await _context.SaveChangesAsync();
 
-        return Result(new { id = foto.Id, nombre = archivo.FileName, tipo = foto.Tipo }, "Foto procesada");
+        // Para la respuesta, generamos una URL temporal (Pre-firmada) como pediste
+        return Result(new { 
+            id = foto.Id, 
+            nombre = archivo.FileName, 
+            tipo = foto.Tipo,
+            url = _s3Service.GetPreSignedUrl(keyFinal) 
+        }, "Foto procesada");
     }
 
-    [HttpPost("completar")]
-    [AuthLvl("e", 2)]
-    [EndpointSummary("Paso 3 : Guardado Integral: Registro de lugar, empadronamiento con folio, personas y detalles biométricos")]
-    public async Task<IActionResult> Completar([FromBody] CrearEmpadronamientoRequest request)
+   [HttpPost("completar")]
+[AuthLvl("e", 2)]
+[EndpointSummary("Paso 3 : Guardado Integral")]
+public async Task<IActionResult> Completar([FromBody] CrearEmpadronamientoRequest request)
+{
+    int orgId = _currentUser.OrganizacionId;
+    int usuarioId = int.TryParse(_currentUser.UserId, out var id) ? id : 0;
+
+    // 1. RECOPILACIÓN DE IDS DE FOTOS
+    var fotoIdsEnRequest = request.Personas
+        .SelectMany(p => p.Fotos.Select(f => f.FotoId))
+        .Concat(request.Personas.Where(p => p.Rostro != null).Select(p => p.Rostro!.FotoId))
+        .ToList();
+
+    if (request.Lugar.ImagenID > 0) fotoIdsEnRequest.Add(request.Lugar.ImagenID);
+
+    fotoIdsEnRequest = fotoIdsEnRequest.Distinct().ToList();
+
+    var diccionarioFotos = await _context.Fotos
+        .Where(f => fotoIdsEnRequest.Contains(f.Id) && f.OrganizacionId == orgId)
+        .ToDictionaryAsync(f => f.Id);
+
+    // VALIDACIÓN DE EXISTENCIA
+    if (diccionarioFotos.Count != fotoIdsEnRequest.Count)
     {
-        int orgId = _currentUser.OrganizacionId;
-        int usuarioId = int.TryParse(_currentUser.UserId, out var id) ? id : 0;
+        var invalidas = fotoIdsEnRequest.Where(id => !diccionarioFotos.ContainsKey(id));
+        return Error($"IDs de fotos inválidos o sin acceso: {string.Join(", ", invalidas)}", "INVALID_PHOTOS");
+    }
 
-        // 1. PRE-VALIDACIÓN DE FOTOS (Incluyendo la foto del LUGAR)
-        var fotoIdsEnRequest = request.Personas
-            .SelectMany(p => p.Fotos.Select(f => f.FotoId))
-            .Concat(request.Personas.Where(p => p.Rostro != null).Select(p => p.Rostro!.FotoId))
-            .ToList();
-
-        // Agregamos el ID de la foto del lugar para que entre en el diccionario
-        if (request.Lugar.ImagenID > 0) fotoIdsEnRequest.Add(request.Lugar.ImagenID);
-
-        fotoIdsEnRequest = fotoIdsEnRequest.Distinct().ToList();
-
-        var diccionarioFotos = await _context.Fotos
-            .Where(f => fotoIdsEnRequest.Contains(f.Id) && f.OrganizacionId == orgId)
-            .ToDictionaryAsync(f => f.Id);
-
-        if (diccionarioFotos.Count != fotoIdsEnRequest.Count)
-        {
-            var invalidas = fotoIdsEnRequest.Where(id => !diccionarioFotos.ContainsKey(id));
-            return Error($"IDs de fotos inválidos o sin acceso: {string.Join(", ", invalidas)}", "INVALID_PHOTOS");
-        }
-
-        // =========================================================================
-        // --- NUEVAS VALIDACIONES DE CATÁLOGO ESTRICTO ---
-        // =========================================================================
-        var tiposValidos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    // --- VALIDACIONES DE CATÁLOGO (NO TOCAR) ---
+    var tiposValidos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "Biométrico Facial", "Lugar / Escena", "Identificación (Frente)",
         "Identificación (Reverso)", "Perfil Izquierdo", "Perfil Derecho",
         "Tatuaje / Seña", "Vehículo", "Pertenencias", "Cuerpo Completo"
     };
 
-        // Validar foto del Lugar
-        if (request.Lugar.ImagenID > 0 && diccionarioFotos.TryGetValue(request.Lugar.ImagenID, out var dbFotoLugar))
-        {
-            if (!dbFotoLugar.Tipo.Equals("Lugar / Escena", StringComparison.OrdinalIgnoreCase))
-                return Error("La foto asignada al lugar no es válida. Debe tener el tipo 'Lugar / Escena'.", "WRONG_PHOTO_TYPE");
-        }
-
-        // Validar fotos de las Personas
-        foreach (var p in request.Personas)
-        {
-            // Validar Rostro
-            if (p.Rostro != null && diccionarioFotos.TryGetValue(p.Rostro.FotoId, out var dbFotoRostro))
-            {
-                if (!dbFotoRostro.Tipo.Equals("Biométrico Facial", StringComparison.OrdinalIgnoreCase))
-                    return Error($"La foto de rostro (ID: {p.Rostro.FotoId}) de la persona debe tener el tipo 'Biométrico Facial'.", "WRONG_PHOTO_TYPE");
-            }
-
-            // Validar fotos adicionales
-            foreach (var fDto in p.Fotos)
-            {
-                var tipoAValidar = !string.IsNullOrEmpty(fDto.TipoFoto) ? fDto.TipoFoto : diccionarioFotos[fDto.FotoId].Tipo;
-
-                if (!tiposValidos.Contains(tipoAValidar))
-                {
-                    return Error($"El tipo de foto '{tipoAValidar}' enviado para la foto extra (ID: {fDto.FotoId}) no existe en el catálogo.", "INVALID_PHOTO_TYPE");
-                }
-
-                if (tipoAValidar.Equals("Biométrico Facial", StringComparison.OrdinalIgnoreCase) ||
-                    tipoAValidar.Equals("Lugar / Escena", StringComparison.OrdinalIgnoreCase))
-                {
-                    return Error($"La foto extra (ID: {fDto.FotoId}) no puede usar los tipos reservados 'Biométrico Facial' ni 'Lugar / Escena'.", "RESTRICTED_PHOTO_TYPE");
-                }
-            }
-        }
-        // =========================================================================
-
-
-        // LEER CONFIGURACIÓN DE AWS (Appsettings.json)
-        var bucketName = _config["AWS:S3:Buckets:Empadronamiento"];
-        var collectionId = _config["AWS:Rekognition:Collections:Empadronamiento"];
-
-        // 2. MANEJO DE ESTRATEGIA DE EJECUCIÓN
-        var strategy = _context.Database.CreateExecutionStrategy();
-
-        return await strategy.ExecuteAsync(async () =>
-        {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
-            {
-                // A. GUARDAR LUGAR DEL EVENTO
-                var lugar = new LugarEmpadronamiento
-                {
-                    Calle = request.Lugar.Calle,
-                    NumeroExterior = request.Lugar.NumeroExterior,
-                    NumeroInterior = request.Lugar.NumeroInterior,
-                    CP = request.Lugar.CP,
-                    Colonia = request.Lugar.Colonia,
-                    Municipio = request.Lugar.Municipio,
-                    Estado = request.Lugar.Estado,
-                    Referencia = request.Lugar.Referencia,
-                    Latitud = request.Lugar.Latitud,
-                    Longitud = request.Lugar.Longitud,
-                    ImagenId = request.Lugar.ImagenID,
-                    OrganizacionId = orgId
-                };
-                _context.LugaresEmpadronamiento.Add(lugar);
-                await _context.SaveChangesAsync();
-
-                // B. GUARDAR CABECERA DE EMPADRONAMIENTO
-                var empadronamiento = new Empadronamiento
-                {
-                    Fecha = request.Fecha,
-                    Hora = request.Hora,
-                    CRP = request.CRPN,
-                    NarrativaHechos = request.NarrativaHechos,
-                    UsuarioResponsableId = usuarioId,
-                    LugarEmpadronamientoId = lugar.Id,
-                    OrganizacionId = orgId
-                };
-                _context.Empadronamientos.Add(empadronamiento);
-                await _context.SaveChangesAsync();
-
-                // GENERACIÓN DE FOLIO ESCALABLE
-                empadronamiento.Folio = $"EMP-O{orgId}-{DateTime.Now.Year}-{empadronamiento.Id:D7}";
-                _context.Empadronamientos.Update(empadronamiento);
-
-                // --- ACTUALIZAR FOTO DEL LUGAR ---
-                if (request.Lugar.ImagenID > 0 && diccionarioFotos.TryGetValue(request.Lugar.ImagenID, out var fotoLugar))
-                {
-                    fotoLugar.IdEmpadronamiento = empadronamiento.Id;
-                    fotoLugar.OrganizacionId = orgId;
-                    fotoLugar.Tipo = "Lugar"; // Tú código original dejaba "Lugar", lo mantuve.
-                    fotoLugar.Descripcion = $"Foto del lugar del evento: {lugar.Calle}";
-                    _context.Fotos.Update(fotoLugar);
-                }
-
-                await _context.SaveChangesAsync();
-
-                // C. PROCESAR PERSONAS Y DETALLES ANIDADOS
-                foreach (var pDto in request.Personas)
-                {
-                    var persona = new Persona
-                    {
-                        Nombre = pDto.Nombre,
-                        ApellidoPaterno = pDto.ApellidoPaterno,
-                        ApellidoMaterno = pDto.ApellidoMaterno,
-                        FechaNacimiento = pDto.FechaNacimiento,
-                        Edad = pDto.Edad,
-                        Estatura = pDto.Estatura,
-                        Sexo = pDto.Sexo,
-                        Originario = pDto.Originario,
-                        Telefono = pDto.Telefono,
-                        Apodo = pDto.Apodo,
-                        Nacionalidad = pDto.Nacionalidad,
-                        EstadoCivil = pDto.EstadoCivil,
-                        Escolaridad = pDto.Escolaridad,
-                        OficioProfesion = pDto.OficioProfesion,
-                        ObservacionesGenerales = pDto.ObservacionesGenerales,
-                        OrganizacionId = orgId
-                    };
-
-                    // 1. DIRECCIÓN DE LA PERSONA
-                    persona.Direcciones.Add(new DireccionPersona
-                    {
-                        Calle = pDto.Direccion.Calle,
-                        NumeroExterior = pDto.Direccion.NumeroExterior,
-                        NumeroInterior = pDto.Direccion.NumeroInterior,
-                        CP = pDto.Direccion.CP,
-                        Colonia = pDto.Direccion.Colonia,
-                        Municipio = pDto.Direccion.Municipio,
-                        Estado = pDto.Direccion.Estado,
-                        Pais = pDto.Direccion.Pais,
-                        Referencia = pDto.Direccion.Referencia,
-                        Latitud = pDto.Direccion.Latitud,
-                        Longitud = pDto.Direccion.Longitud,
-                        EsPrincipal = pDto.Direccion.EsPrincipal,
-                        OrganizacionId = orgId
-                    });
-
-                    // 2. FAMILIARES
-                    if (pDto.Familiares != null)
-                    {
-                        foreach (var f in pDto.Familiares)
-                        {
-                            persona.Familiares.Add(new Familiar
-                            {
-                                NombreCompleto = f.NombreCompleto,
-                                Parentesco = f.Parentesco,
-                                Telefono = f.Telefono,
-                                Direccion = f.Direccion,
-                                OrganizacionId = orgId
-                            });
-                        }
-                    }
-
-                    // 3. REDES SOCIALES
-                    if (pDto.RedesSociales != null)
-                    {
-                        foreach (var rs in pDto.RedesSociales)
-                        {
-                            persona.RedesSociales.Add(new RedSocial
-                            {
-                                TipoRedSocial = rs.TipoRedSocial,
-                                Usuario = rs.Usuario,
-                                UrlPerfil = rs.UrlPerfil,
-                                OrganizacionId = orgId
-                            });
-                        }
-                    }
-
-                    _context.Personas.Add(persona);
-                    await _context.SaveChangesAsync();
-
-                    // 4. RELACIÓN INTERMEDIA
-                    _context.EmpadronamientoPersonas.Add(new EmpadronamientoPersona
-                    {
-                        EmpadronamientoId = empadronamiento.Id,
-                        PersonaId = persona.Id,
-                        Observaciones = pDto.ObservacionesEmpadronamiento,
-                        OrganizacionId = orgId
-                    });
-
-                    // 5. ACTUALIZAR FOTOS DE LA PERSONA
-                    foreach (var fDto in pDto.Fotos)
-                    {
-                        var foto = diccionarioFotos[fDto.FotoId];
-                        foto.IdPersona = persona.Id;
-                        foto.IdEmpadronamiento = empadronamiento.Id;
-                        foto.OrganizacionId = orgId;
-                        foto.Tipo = fDto.TipoFoto;
-                        foto.Descripcion = fDto.Descripcion;
-                        _context.Fotos.Update(foto);
-                    }
-
-                    // 6. ROSTRO Y AWS REKOGNITION
-                    if (pDto.Rostro != null)
-                    {
-                        var fotoRostro = diccionarioFotos[pDto.Rostro.FotoId];
-                        fotoRostro.IdPersona = persona.Id;
-                        fotoRostro.IdEmpadronamiento = empadronamiento.Id;
-                        fotoRostro.OrganizacionId = orgId;
-                        _context.Fotos.Update(fotoRostro);
-
-                        var resRek = await _rekognitionService.IndexFaceAndGetDetailsAsync(
-                            bucketName!, fotoRostro.S3Key, collectionId!, $"persona_{persona.Id}");
-
-                        if (resRek.Exito)
-                        {
-                            _context.Caras.Add(new Cara
-                            {
-                                IdFoto = fotoRostro.Id,
-                                OrganizacionId = orgId,
-                                FaceId = resRek.FaceId!,
-                                S3Key = fotoRostro.S3Key,
-                                BoundingBox = resRek.BoundingBoxJson,
-                                Confidence = resRek.Confidence ?? 0
-                            });
-                        }
-                    }
-                }
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return Result(new { id = empadronamiento.Id, folio = empadronamiento.Folio }, "Registro guardado íntegramente.");
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                _logger.LogError(ex, "Fallo crítico en el guardado de empadronamiento");
-                var msg = ex.InnerException?.Message ?? ex.Message;
-                return Error($"Error de persistencia: {msg}", "SAVE_FULL_ERROR");
-            }
-        });
+    if (request.Lugar.ImagenID > 0 && diccionarioFotos.TryGetValue(request.Lugar.ImagenID, out var dbFotoLugar))
+    {
+        if (!dbFotoLugar.Tipo.Equals("Lugar / Escena", StringComparison.OrdinalIgnoreCase))
+            return Error("La foto asignada al lugar no es válida.", "WRONG_PHOTO_TYPE");
     }
+
+    var bucketName = _config["AWS:S3:Buckets:Empadronamiento"];
+    var collectionId = _config["AWS:Rekognition:Collections:Empadronamiento"];
+
+    var strategy = _context.Database.CreateExecutionStrategy();
+
+    return await strategy.ExecuteAsync(async () =>
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            // A. GUARDAR LUGAR
+            var lugar = new LugarEmpadronamiento
+            {
+                Calle = request.Lugar.Calle,
+                NumeroExterior = request.Lugar.NumeroExterior,
+                NumeroInterior = request.Lugar.NumeroInterior ?? "",
+                CP = request.Lugar.CP,
+                Colonia = request.Lugar.Colonia,
+                Municipio = request.Lugar.Municipio,
+                Estado = request.Lugar.Estado,
+                Referencia = request.Lugar.Referencia,
+                Latitud = request.Lugar.Latitud,
+                Longitud = request.Lugar.Longitud,
+                ImagenId = request.Lugar.ImagenID,
+                OrganizacionId = orgId
+            };
+            _context.LugaresEmpadronamiento.Add(lugar);
+            await _context.SaveChangesAsync();
+
+            // B. GUARDAR CABECERA
+            var empadronamiento = new Empadronamiento
+            {
+                Fecha = request.Fecha,
+                Hora = request.Hora,
+                CRP = request.CRPN,
+                NarrativaHechos = request.NarrativaHechos,
+                UsuarioResponsableId = usuarioId,
+                LugarEmpadronamientoId = lugar.Id,
+                OrganizacionId = orgId
+            };
+            _context.Empadronamientos.Add(empadronamiento);
+            await _context.SaveChangesAsync();
+
+            empadronamiento.Folio = $"EMP-O{orgId}-{DateTime.Now.Year}-{empadronamiento.Id:D7}";
+            _context.Empadronamientos.Update(empadronamiento);
+
+            // ACTUALIZAR FOTO LUGAR
+            if (request.Lugar.ImagenID > 0 && diccionarioFotos.TryGetValue(request.Lugar.ImagenID, out var fotoLugar))
+            {
+                fotoLugar.IdEmpadronamiento = empadronamiento.Id;
+                fotoLugar.Tipo = "Lugar / Escena";
+                _context.Fotos.Update(fotoLugar);
+            }
+
+            // C. PROCESAR PERSONAS
+            foreach (var pDto in request.Personas)
+            {
+                var persona = new Persona
+                {
+                    Nombre = pDto.Nombre,
+                    ApellidoPaterno = pDto.ApellidoPaterno,
+                    ApellidoMaterno = pDto.ApellidoMaterno,
+                    FechaNacimiento = pDto.FechaNacimiento,
+                    Edad = pDto.Edad,
+                    Estatura = pDto.Estatura,
+                    Sexo = pDto.Sexo,
+                    Originario = pDto.Originario,
+                    Telefono = pDto.Telefono,
+                    Apodo = pDto.Apodo,
+                    Nacionalidad = pDto.Nacionalidad,
+                    EstadoCivil = pDto.EstadoCivil,
+                    Escolaridad = pDto.Escolaridad,
+                    OficioProfesion = pDto.OficioProfesion,
+                    ObservacionesGenerales = pDto.ObservacionesGenerales,
+                    OrganizacionId = orgId
+                };
+
+                // --- MAPPEO DE HIJOS (LO QUE FALTABA) ---
+                
+                // 1. Dirección
+                persona.Direcciones.Add(new DireccionPersona
+                {
+                    Calle = pDto.Direccion.Calle,
+                    NumeroExterior = pDto.Direccion.NumeroExterior,
+                    NumeroInterior = pDto.Direccion.NumeroInterior,
+                    CP = pDto.Direccion.CP,
+                    Colonia = pDto.Direccion.Colonia,
+                    Municipio = pDto.Direccion.Municipio,
+                    Estado = pDto.Direccion.Estado,
+                    Pais = pDto.Direccion.Pais,
+                    Referencia = pDto.Direccion.Referencia,
+                    Latitud = pDto.Direccion.Latitud,
+                    Longitud = pDto.Direccion.Longitud,
+                    EsPrincipal = pDto.Direccion.EsPrincipal,
+                    OrganizacionId = orgId
+                });
+
+                // 2. Redes Sociales
+                foreach (var rs in pDto.RedesSociales)
+                {
+                    persona.RedesSociales.Add(new RedSocial
+                    {
+                        TipoRedSocial = rs.TipoRedSocial,
+                        Usuario = rs.Usuario,
+                        UrlPerfil = rs.UrlPerfil,
+                        OrganizacionId = orgId
+                    });
+                }
+
+                // 3. Familiares
+                foreach (var fam in pDto.Familiares)
+                {
+                    persona.Familiares.Add(new Familiar
+                    {
+                        NombreCompleto = fam.NombreCompleto,
+                        Parentesco = fam.Parentesco,
+                        Telefono = fam.Telefono,
+                        Direccion = fam.Direccion,
+                        OrganizacionId = orgId
+                    });
+                }
+
+                _context.Personas.Add(persona);
+                await _context.SaveChangesAsync();
+
+                // 4. RELACIÓN INTERMEDIA
+                _context.EmpadronamientoPersonas.Add(new EmpadronamientoPersona
+                {
+                    EmpadronamientoId = empadronamiento.Id,
+                    PersonaId = persona.Id,
+                    Observaciones = pDto.ObservacionesEmpadronamiento,
+                    OrganizacionId = orgId
+                });
+
+                // 5. ACTUALIZAR FOTOS PERSONA
+                foreach (var fDto in pDto.Fotos)
+                {
+                    var foto = diccionarioFotos[fDto.FotoId];
+                    foto.IdPersona = persona.Id;
+                    foto.IdEmpadronamiento = empadronamiento.Id;
+                    foto.Tipo = fDto.TipoFoto;
+                    foto.Descripcion = fDto.Descripcion;
+                    _context.Fotos.Update(foto);
+                }
+
+                // 6. ROSTRO Y REKOGNITION (LO TENEMOS DE VUELTA)
+                if (pDto.Rostro != null)
+                {
+                    var fotoRostro = diccionarioFotos[pDto.Rostro.FotoId];
+                    fotoRostro.IdPersona = persona.Id;
+                    fotoRostro.IdEmpadronamiento = empadronamiento.Id;
+                    fotoRostro.Tipo = "Biométrico Facial";
+                    _context.Fotos.Update(fotoRostro);
+
+                    var resRek = await _rekognitionService.IndexFaceAndGetDetailsAsync(
+                        bucketName!, fotoRostro.S3Key, collectionId!, $"persona_{persona.Id}");
+
+                    if (resRek.Exito)
+                    {
+                        _context.Caras.Add(new Cara
+                        {
+                            IdFoto = fotoRostro.Id,
+                            OrganizacionId = orgId,
+                            FaceId = resRek.FaceId!,
+                            S3Key = fotoRostro.S3Key,
+                            BoundingBox = resRek.BoundingBoxJson,
+                            Confidence = resRek.Confidence ?? 0
+                        });
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Result(new { id = empadronamiento.Id, folio = empadronamiento.Folio }, "Registro guardado íntegramente.");
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Fallo crítico en guardado");
+            return Error($"Error: {ex.Message}");
+        }
+    });
+}
 }

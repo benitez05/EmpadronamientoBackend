@@ -8,7 +8,7 @@ public static class EmailTemplates
         return $@"
         <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px; background-color: #ffffff;'>
             <div style='text-align: center; padding-bottom: 20px; border-bottom: 1px solid #eaeaea;'>
-                <h2 style='color: #2c3e50; margin: 0;'>Sistema de Empadronamiento</h2>
+                <h2 style='color: #2c3e50; margin: 0;'>Spii Empadronamiento</h2>
             </div>
             <div style='padding: 20px 0;'>
                 <h3 style='color: #333;'>¡Hola {nombre}!</h3>

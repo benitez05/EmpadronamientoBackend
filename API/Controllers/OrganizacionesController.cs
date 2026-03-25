@@ -32,7 +32,6 @@ public class OrganizacionesController : BaseController
     [HttpGet]
     [AuthLvl("o", 1)]
     [EndpointSummary("Listar organizaciones")]
-    [ProducesResponseType(typeof(ApiResponse<List<OrganizacionResponse>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll()
     {
         var orgs = await _context.Organizaciones
@@ -46,7 +45,6 @@ public class OrganizacionesController : BaseController
     [AuthLvl("o", 3)]
     [EndpointSummary("Crear nueva organización")]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create([FromForm] OrganizacionRequest request)
     {
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -61,37 +59,13 @@ public class OrganizacionesController : BaseController
 
             try
             {
-                string? logoPath = null;
-
-                // =========================
-                // SUBIR LOGO
-                // =========================
-                if (request.Logo != null && request.Logo.Length > 0)
-                {
-                    try
-                    {
-                        var fileName = $"organizaciones/{DateTime.UtcNow.Ticks}_{request.Logo.FileName}";
-                        using var stream = request.Logo.OpenReadStream();
-
-                        await _s3Service.UploadImageAsync(stream, fileName, request.Logo.ContentType);
-                        logoPath = fileName;
-                    }
-                    catch
-                    {
-                        return Error("No se pudo subir el logo de la organización.");
-                    }
-                }
-
-                // =========================
-                // CREAR ORGANIZACIÓN
-                // =========================
+                // 1. CREAR ENTIDAD PRIMERO PARA OBTENER EL ID
                 var nuevaOrg = new Organizacion
                 {
                     Nombre = request.Nombre,
                     Descripcion = request.Descripcion,
                     EmailContacto = request.EmailContacto,
                     Telefono = request.Telefono,
-
                     Calle = request.Calle,
                     NumeroExterior = request.NumeroExterior,
                     NumeroInterior = request.NumeroInterior,
@@ -100,24 +74,40 @@ public class OrganizacionesController : BaseController
                     Municipio = request.Municipio,
                     Estado = request.Estado,
                     Pais = request.Pais,
-
-                    LogoUrl = logoPath,
+                    LogoUrl = null, // Se actualiza en el siguiente paso
                     PlanId = request.PlanId,
                     FechaVencimiento = request.FechaVencimiento,
                     Activa = request.Activa
                 };
 
                 _context.Organizaciones.Add(nuevaOrg);
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(); // 🔥 Aquí se genera nuevaOrg.Id
 
-                // =========================
-                // CREAR CATÁLOGOS FIJOS
-                // =========================
+                // 2. SUBIR LOGO USANDO EL ID RECIÉN GENERADO
+                if (request.Logo != null && request.Logo.Length > 0)
+                {
+                    try
+                    {
+                        // Estructura de carpeta física: organizaciones / {id} / archivo
+                        var pathSugerido = $"organizaciones/{nuevaOrg.Id}/logo_{Guid.NewGuid()}{Path.GetExtension(request.Logo.FileName)}";
+                        using var stream = request.Logo.OpenReadStream();
+
+                        // Subimos y obtenemos la key completa (dev/organizaciones/id/...)
+                        var keyFinal = await _s3Service.UploadImageAsync(stream, pathSugerido, request.Logo.ContentType);
+
+                        // Actualizamos la entidad con la ruta real
+                        nuevaOrg.LogoUrl = keyFinal;
+                        await _context.SaveChangesAsync();
+                    }
+                    catch
+                    {
+                        return Error("No se pudo subir el logo de la organización.");
+                    }
+                }
+
+                // 3. SEGUIR CON LA LÓGICA DE CATÁLOGOS Y ROLES
                 await CrearCatalogosBaseAsync(nuevaOrg.Id);
 
-                // =========================
-                // ACTIVAR MÓDULOS
-                // =========================
                 var modulosBase = await _context.Modulos
                     .Where(m => m.K == "u" || m.K == "r" || m.K == "o" || m.K == "c" || m.K == "e")
                     .ToListAsync();
@@ -133,50 +123,34 @@ public class OrganizacionesController : BaseController
                     });
                 }
 
-                await _context.SaveChangesAsync();
-
-                // =========================
-                // CREAR ROLES
-                // =========================
                 var templates = new List<(string Nombre, int Nivel)>
                 {
-                ("Administrador", 3),
-                ("Editor", 2),
-                ("Lectura", 1)
+                    ("Administrador", 3),
+                    ("Editor", 2),
+                    ("Lectura", 1)
                 };
 
                 foreach (var t in templates)
                 {
-                    var nuevoRol = new Role
-                    {
-                        Nombre = t.Nombre,
-                        OrganizacionId = nuevaOrg.Id
-                    };
-
+                    var nuevoRol = new Role { Nombre = t.Nombre, OrganizacionId = nuevaOrg.Id };
                     _context.Roles.Add(nuevoRol);
                     await _context.SaveChangesAsync();
 
                     foreach (var m in modulosBase)
                     {
-                        _context.RolesPermisos.Add(new RolePermiso
-                        {
-                            RoleId = nuevoRol.Id,
-                            ModuloId = m.Id,
-                            Lvl = t.Nivel
-                        });
+                        _context.RolesPermisos.Add(new RolePermiso { RoleId = nuevoRol.Id, ModuloId = m.Id, Lvl = t.Nivel });
                     }
                 }
 
                 await _context.SaveChangesAsync();
-
                 await transaction.CommitAsync();
 
                 return Result(nuevaOrg.Id, "Organización creada correctamente.");
             }
-            catch
+            catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return Error("Error crítico al configurar la organización.");
+                return Error($"Error crítico: {ex.Message}");
             }
         });
     }
@@ -185,39 +159,27 @@ public class OrganizacionesController : BaseController
     [AuthLvl("o", 2)]
     [EndpointSummary("Editar organización")]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(typeof(ApiResponse<OrganizacionResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(int id, [FromForm] OrganizacionRequest request)
     {
-        var org = await _context.Organizaciones
-            .Include(o => o.Plan)
-            .FirstOrDefaultAsync(o => o.Id == id);
-
-        if (org == null)
-            return Error("Organización no encontrada.");
+        var org = await _context.Organizaciones.FirstOrDefaultAsync(o => o.Id == id);
+        if (org == null) return Error("Organización no encontrada.");
 
         string? previousLogo = org.LogoUrl;
 
-        // Subida del nuevo logo
         if (request.Logo != null && request.Logo.Length > 0)
         {
             try
             {
-                var fileName = $"organizaciones/{org.Id}_{DateTime.UtcNow.Ticks}_{request.Logo.FileName}";
+                // Estructura de carpeta física para Update: organizaciones / {id} / archivo
+                var pathSugerido = $"organizaciones/{org.Id}/logo_{Guid.NewGuid()}{Path.GetExtension(request.Logo.FileName)}";
                 using var stream = request.Logo.OpenReadStream();
 
-                await _s3Service.UploadImageAsync(stream, fileName, request.Logo.ContentType);
-                org.LogoUrl = fileName;
+                var keyFinal = await _s3Service.UploadImageAsync(stream, pathSugerido, request.Logo.ContentType);
+                org.LogoUrl = keyFinal;
 
                 if (!string.IsNullOrEmpty(previousLogo))
                 {
-                    try
-                    {
-                        await _s3Service.DeleteImageAsync(previousLogo);
-                    }
-                    catch
-                    {
-                        // no detenemos la operación si falla eliminar
-                    }
+                    try { await _s3Service.DeleteImageAsync(previousLogo); } catch { }
                 }
             }
             catch
@@ -226,12 +188,10 @@ public class OrganizacionesController : BaseController
             }
         }
 
-        // Actualizar datos
         org.Nombre = request.Nombre;
         org.Descripcion = request.Descripcion;
         org.EmailContacto = request.EmailContacto;
         org.Telefono = request.Telefono;
-
         org.Calle = request.Calle;
         org.NumeroExterior = request.NumeroExterior;
         org.NumeroInterior = request.NumeroInterior;
@@ -240,7 +200,6 @@ public class OrganizacionesController : BaseController
         org.Municipio = request.Municipio;
         org.Estado = request.Estado;
         org.Pais = request.Pais;
-
         org.PlanId = request.PlanId;
         org.Activa = request.Activa;
         org.FechaVencimiento = request.FechaVencimiento;

@@ -9,60 +9,70 @@ using System.Threading.Tasks;
 
 namespace EmpadronamientoBackend.Infrastructure.Services
 {
-    /// <summary>
-    /// Servicio que maneja almacenamiento de archivos en Amazon S3.
-    /// </summary>
     public class S3Service : IS3Service
     {
         private readonly IAmazonS3 _s3Client;
         private readonly string _bucketName;
+        private readonly string _prefixFolder;
 
-        /// <summary>
-        /// Constructor que obtiene el cliente S3 y configuración del bucket.
-        /// </summary>
         public S3Service(IAmazonS3 s3Client, IConfiguration configuration)
         {
             _s3Client = s3Client;
             _bucketName = configuration["AWS:S3:Buckets:Empadronamiento"];
+            
+            // Leemos el prefijo (dev/prod). Por defecto dev.
+            var configPrefix = configuration["AWS:S3:Buckets:PrefixFolder"];
+            _prefixFolder = string.IsNullOrWhiteSpace(configPrefix) ? "dev" : configPrefix.Trim('/');
         }
 
         /// <summary>
-        /// Sube un archivo al bucket configurado.
+        /// Aplica el prefijo de entorno (dev/prod) preservando la subcarpeta enviada.
+        /// Ejemplo: "Fotos/1.jpg" -> "dev/Fotos/1.jpg"
         /// </summary>
-        public async Task<string> UploadImageAsync(Stream fileStream, string fileName, string contentType)
+        private string AplicarPrefijo(string path)
         {
+            if (string.IsNullOrWhiteSpace(path)) return path;
+
+            // Si ya tiene el prefijo, no lo duplicamos
+            if (path.StartsWith($"{_prefixFolder}/"))
+                return path;
+
+            return $"{_prefixFolder}/{path.TrimStart('/')}";
+        }
+
+        public async Task<string> UploadImageAsync(Stream fileStream, string path, string contentType)
+        {
+            var keyCompleta = AplicarPrefijo(path);
+
             var uploadRequest = new TransferUtilityUploadRequest
             {
                 InputStream = fileStream,
-                Key = fileName,
+                Key = keyCompleta,
                 BucketName = _bucketName,
                 ContentType = contentType
             };
 
             var transferUtility = new TransferUtility(_s3Client);
-
             await transferUtility.UploadAsync(uploadRequest);
 
-            return GetFileUrl(fileName);
+            // Retornamos la KEY completa con el prefijo para que se guarde en la BD
+            return keyCompleta; 
         }
 
-        /// <summary>
-        /// Obtiene la URL pública del archivo.
-        /// </summary>
-        public string GetFileUrl(string fileName)
+        public string GetFileUrl(string path)
         {
-            return $"https://{_bucketName}.s3.amazonaws.com/{fileName}";
+            var keyCompleta = AplicarPrefijo(path);
+            return $"https://{_bucketName}.s3.amazonaws.com/{keyCompleta}";
         }
 
-        /// <summary>
-        /// Genera una URL temporal para acceder a un archivo privado.
-        /// </summary>
-        public string GetPreSignedUrl(string fileName, int expirationMinutes = 60)
+        public string GetPreSignedUrl(string path, int expirationMinutes = 60)
         {
+            var keyCompleta = AplicarPrefijo(path);
+
             var request = new GetPreSignedUrlRequest
             {
                 BucketName = _bucketName,
-                Key = fileName,
+                Key = keyCompleta,
                 Expires = DateTime.UtcNow.AddMinutes(expirationMinutes),
                 Verb = HttpVerb.GET
             };
@@ -70,27 +80,21 @@ namespace EmpadronamientoBackend.Infrastructure.Services
             return _s3Client.GetPreSignedURL(request);
         }
 
-        /// <summary>
-        /// Elimina un archivo del bucket S3 usando su nombre.
-        /// </summary>
-        /// <param name="fileName">Nombre completo del archivo en S3 (incluyendo carpetas si aplica).</param>
-        public async Task DeleteImageAsync(string fileName)
+        public async Task DeleteImageAsync(string path)
         {
+            var keyCompleta = AplicarPrefijo(path);
+
             try
             {
-                var deleteRequest = new DeleteObjectRequest
+                await _s3Client.DeleteObjectAsync(new DeleteObjectRequest
                 {
                     BucketName = _bucketName,
-                    Key = fileName
-                };
-
-                await _s3Client.DeleteObjectAsync(deleteRequest);
+                    Key = keyCompleta
+                });
             }
             catch (AmazonS3Exception ex)
             {
-                // Registrar el error, pero no interrumpir la aplicación
-                // Puedes lanzar una excepción personalizada si quieres
-                throw new Exception($"Error al eliminar el archivo '{fileName}' en S3: {ex.Message}", ex);
+                throw new Exception($"Error al eliminar '{keyCompleta}' en S3: {ex.Message}", ex);
             }
         }
     }
