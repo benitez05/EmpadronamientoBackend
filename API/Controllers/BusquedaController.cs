@@ -105,7 +105,7 @@ public class BusquedaController : BaseController
             // 4. Consulta LIGERA a la Base de Datos
             int orgId = _currentUser.OrganizacionId;
             var personasBasicas = await _context.Personas
-                .Include(p => p.Caras)
+                .Include(p => p.Fotos) // 🔥 Cambiamos Caras por Fotos
                 .Include(p => p.Empadronamientos).ThenInclude(ep => ep.Empadronamiento)
                 .Where(p => idsABuscar.Contains(p.Id) && p.OrganizacionId == orgId)
                 .ToListAsync();
@@ -115,9 +115,12 @@ public class BusquedaController : BaseController
 
             foreach (var p in personasBasicas)
             {
-                // Obtenemos la cara principal registrada en el sistema
-                var caraPrincipal = p.Caras.FirstOrDefault();
-                string? fotoUrl = caraPrincipal != null ? _s3Service.GetFileUrl(caraPrincipal.S3Key) : null;
+                // 🔥 Obtenemos la foto principal filtrando por su tipo, igual que en tu resumen
+                var fotoPrincipal = p.Fotos.FirstOrDefault(f => f.Tipo == "Biométrico Facial")
+                                 ?? p.Fotos.FirstOrDefault();
+
+                // 🔥 Usamos GetPreSignedUrl en lugar de GetFileUrl
+                string? fotoUrl = fotoPrincipal != null ? _s3Service.GetPreSignedUrl(fotoPrincipal.S3Key) : null;
 
                 // Obtenemos el folio del empadronamiento más reciente
                 var ultimoFolio = p.Empadronamientos
@@ -154,7 +157,7 @@ public class BusquedaController : BaseController
         {
             int orgId = _currentUser.OrganizacionId;
 
-            // 1. Consulta profunda: Traemos Persona -> Empadronamientos -> Lugar del Evento
+            // 1. Consulta profunda: Traemos todo el árbol
             var p = await _context.Personas
                 .Include(x => x.Caras)
                 .Include(x => x.Fotos)
@@ -163,7 +166,7 @@ public class BusquedaController : BaseController
                 .Include(x => x.RedesSociales)
                 .Include(x => x.Empadronamientos)
                     .ThenInclude(ep => ep.Empadronamiento)
-                        .ThenInclude(e => e.Lugar) // 🔥 Necesario para las coordenadas del historial
+                        .ThenInclude(e => e.Lugar)
                 .FirstOrDefaultAsync(x => x.Id == personaId && x.OrganizacionId == orgId);
 
             if (p == null)
@@ -172,34 +175,41 @@ public class BusquedaController : BaseController
             var fotoPrincipal = p.Fotos.FirstOrDefault(f => f.Tipo == "Biométrico Facial")
                                ?? p.Fotos.FirstOrDefault();
 
+            // 2. Mapeo a la respuesta enriquecida
             var expediente = new PersonaResumenResponse
             {
                 PersonaId = p.Id,
-                NombreCompleto = $"{p.Nombre} {p.ApellidoPaterno} {p.ApellidoMaterno}".Trim(),
-                Apodo = p.Apodo ?? "N/A",
-                Sexo = p.Sexo ?? "No especificado",
+                Nombre = p.Nombre ?? "",
+                ApellidoPaterno = p.ApellidoPaterno ?? "",
+                ApellidoMaterno = p.ApellidoMaterno ?? "",
+                Apodo = p.Apodo,
+                Sexo = p.Sexo,
                 Edad = p.Edad,
                 Estatura = p.Estatura,
                 FechaNacimiento = p.FechaNacimiento?.ToString("yyyy-MM-dd"),
-                Nacionalidad = p.Nacionalidad ?? "N/A",
-                Originario = p.Originario ?? "N/A",
-                Telefono = p.Telefono ?? "N/A",
-                EstadoCivil = p.EstadoCivil ?? "N/A",
-                Escolaridad = p.Escolaridad ?? "N/A",
-                OficioProfesion = p.OficioProfesion ?? "N/A",
+                Nacionalidad = p.Nacionalidad,
+                Originario = p.Originario,
+                Telefono = p.Telefono,
+                EstadoCivil = p.EstadoCivil,
+                Escolaridad = p.Escolaridad,
+                OficioProfesion = p.OficioProfesion,
                 ObservacionesGenerales = p.ObservacionesGenerales,
 
+                // Objeto Rostro
+                Rostro = fotoPrincipal != null ? new RostroDto { FotoId = fotoPrincipal.Id } : null,
                 FotoPrincipalUrl = fotoPrincipal != null ? _s3Service.GetPreSignedUrl(fotoPrincipal.S3Key) : null,
 
+                // Direcciones Personales
                 Direcciones = p.Direcciones.Select(d => new DireccionDto
                 {
-                    Calle = d.Calle,
-                    NumeroExterior = d.NumeroExterior,
-                    NumeroInterior = d.NumeroInterior,
-                    Colonia = d.Colonia,
-                    Municipio = d.Municipio,
-                    Estado = d.Estado,
-                    Pais = d.Pais,
+                    Calle = d.Calle ?? "",
+                    NumeroExterior = d.NumeroExterior ?? "",
+                    NumeroInterior = d.NumeroInterior ?? "",
+                    Cp = d.CP, // ⚠️ Ahora sí mapeado correctamente a d.CP
+                    Colonia = d.Colonia ?? "",
+                    Municipio = d.Municipio ?? "",
+                    Estado = d.Estado ?? "",
+                    Pais = d.Pais ?? "",
                     Referencia = d.Referencia,
                     Latitud = d.Latitud,
                     Longitud = d.Longitud,
@@ -208,26 +218,28 @@ public class BusquedaController : BaseController
 
                 Familiares = p.Familiares.Select(f => new FamiliarDto
                 {
-                    NombreCompleto = f.NombreCompleto,
+                    NombreCompleto = f.NombreCompleto ?? "",
                     Parentesco = f.Parentesco ?? "N/A",
-                    Telefono = f.Telefono ?? "N/A",
+                    Telefono = f.Telefono,
                     Direccion = f.Direccion
                 }).ToList(),
 
                 RedesSociales = p.RedesSociales.Select(rs => new RedSocialDto
                 {
-                    Tipo = rs.TipoRedSocial,
-                    Usuario = rs.Usuario,
+                    TipoRedSocial = rs.TipoRedSocial ?? "",
+                    Usuario = rs.Usuario ?? "",
                     UrlPerfil = rs.UrlPerfil
                 }).ToList(),
 
                 Fotos = p.Fotos.Select(f => new FotoDto
                 {
-                    Tipo = f.Tipo ?? "Otro",
+                    FotoId = f.Id,
+                    TipoFoto = f.Tipo ?? "Otro",
                     Descripcion = f.Descripcion,
                     Url = _s3Service.GetPreSignedUrl(f.S3Key)
                 }).ToList(),
 
+                // Empadronamientos (El evento)
                 Empadronamientos = p.Empadronamientos
                     .Where(ep => ep.Empadronamiento != null)
                     .Select(ep => new EmpadronamientoHistorialDto
@@ -236,13 +248,24 @@ public class BusquedaController : BaseController
                         Folio = ep.Empadronamiento.Folio ?? "S/F",
                         Fecha = ep.Empadronamiento.Fecha.ToString("yyyy-MM-dd"),
                         Hora = ep.Empadronamiento.Hora.ToString(@"hh\:mm"),
-                        CRP = ep.Empadronamiento.CRP ?? "N/A",
-                        Observaciones = ep.Observaciones ?? "Sin observaciones",
+                        Crpn = ep.Empadronamiento.CRP ?? "",
+                        NarrativaHechos = ep.Empadronamiento.NarrativaHechos ?? "",
 
-                        // 🔥 Mapeo de la Ubicación del Evento Histórico
-                        UbicacionEvento = $"{ep.Empadronamiento.Lugar.Calle} {ep.Empadronamiento.Lugar.NumeroExterior}".Trim(),
-                        LatitudEvento = ep.Empadronamiento.Lugar.Latitud,
-                        LongitudEvento = ep.Empadronamiento.Lugar.Longitud
+                        // 🔥 Lugar del evento
+                        Lugar = ep.Empadronamiento.Lugar != null ? new LugarDto
+                        {
+                            Calle = ep.Empadronamiento.Lugar.Calle ?? "",
+                            NumeroExterior = ep.Empadronamiento.Lugar.NumeroExterior ?? "",
+                            NumeroInterior = ep.Empadronamiento.Lugar.NumeroInterior ?? "",
+                            Cp = ep.Empadronamiento.Lugar.CP, // ⚠️ Ahora sí mapeado a CP
+                            Colonia = ep.Empadronamiento.Lugar.Colonia ?? "",
+                            Municipio = ep.Empadronamiento.Lugar.Municipio ?? "",
+                            Estado = ep.Empadronamiento.Lugar.Estado ?? "",
+                            Referencia = ep.Empadronamiento.Lugar.Referencia,
+                            Latitud = ep.Empadronamiento.Lugar.Latitud,
+                            Longitud = ep.Empadronamiento.Lugar.Longitud,
+                            ImagenID = ep.Empadronamiento.Lugar.ImagenId > 0 ? ep.Empadronamiento.Lugar.ImagenId : null // ⚠️ Ahora sí mapeado a ImagenId
+                        } : null
                     })
                     .OrderByDescending(e => e.Fecha)
                     .ToList()
