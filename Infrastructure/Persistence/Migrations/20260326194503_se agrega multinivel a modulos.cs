@@ -22,69 +22,72 @@ namespace Infrastructure.Persistence.Migrations
                 table: "Modulos",
                 keyColumn: "Id",
                 keyValue: 1,
-                columns: new string[0],
-                values: new object[0]);
+                column: "Multinivel",
+                value: true);
 
             migrationBuilder.UpdateData(
                 table: "Modulos",
                 keyColumn: "Id",
                 keyValue: 2,
-                columns: new string[0],
-                values: new object[0]);
+                column: "Multinivel",
+                value: true);
 
             migrationBuilder.UpdateData(
                 table: "Modulos",
                 keyColumn: "Id",
                 keyValue: 3,
-                columns: new string[0],
-                values: new object[0]);
+                column: "Multinivel",
+                value: true);
 
+            // REEMPLAZA EL BLOQUE DEL ID 4
             migrationBuilder.UpdateData(
                 table: "Modulos",
                 keyColumn: "Id",
                 keyValue: 4,
-                columns: new string[0],
-                values: new object[0]);
+                column: "Multinivel",
+                value: false);
 
+            // REEMPLAZA EL BLOQUE DEL ID 5
             migrationBuilder.UpdateData(
                 table: "Modulos",
                 keyColumn: "Id",
                 keyValue: 5,
-                columns: new string[0],
-                values: new object[0]);
+                column: "Multinivel",
+                value: false);
 
+            // REEMPLAZA EL BLOQUE DEL ID 6
             migrationBuilder.UpdateData(
                 table: "Modulos",
                 keyColumn: "Id",
                 keyValue: 6,
-                columns: new string[0],
-                values: new object[0]);
+                column: "Multinivel",
+                value: false);
 
             migrationBuilder.UpdateData(
                 table: "Modulos",
                 keyColumn: "Id",
                 keyValue: 7,
-                columns: new string[0],
-                values: new object[0]);
+                column: "Multinivel",
+                value: true);
 
             migrationBuilder.InsertData(
                 table: "Modulos",
-                columns: new[] { "Id", "Color", "Icono", "K", "Nombre" },
-                values: new object[] { 8, "#6B7280", null, "m", "Modulo" });
+                columns: new[] { "Id", "Color", "Icono", "K", "Multinivel", "Nombre" },
+                values: new object[] { 8, "#6B7280", null, "m", true, "Modulo" });
 
             migrationBuilder.UpdateData(
                 table: "Usuarios",
                 keyColumn: "Id",
                 keyValue: 1,
                 column: "PasswordHash",
-                value: "AQAAAAIAAYagAAAAEBs13pDjqsTJqwOdL5ZJ9orH7LrEiAsuMDA9ExlffMMS48vN/JIjibvVDZJBZ3CwSw==");
+                value: "AQAAAAIAAYagAAAAECY7cGIaC013qlPqpxuiJEOwRsfgzIub/0KoYNBnkl+YCFLFdsJ20R0egw3oxpABcA==");
 
             migrationBuilder.UpdateData(
                 table: "Usuarios",
                 keyColumn: "Id",
                 keyValue: 2,
                 column: "PasswordHash",
-                value: "AQAAAAIAAYagAAAAEMK2vJy4wT+hcsYv/FY8diEWZ8WKbueC0dHXZc86x/JkQVSslb2UHEdswl0tilJU6w==");
+                value: "AQAAAAIAAYagAAAAEC7HJrLSLCBe0TxfX3a0Su1o8FHBUWl/ESsi4ePts22lCYHXjE+QdVU6V7qy+W+gxA==");
 
             migrationBuilder.InsertData(
                 table: "OrganizacionModulos",

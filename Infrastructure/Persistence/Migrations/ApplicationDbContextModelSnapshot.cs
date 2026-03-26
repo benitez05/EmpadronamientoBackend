@@ -1422,7 +1422,7 @@ namespace Infrastructure.Persistence.Migrations
                             Id = 1,
                             Color = "#6B7280",
                             K = "u",
-                            Multinivel = false,
+                            Multinivel = true,
                             Nombre = "Usuarios"
                         },
                         new
@@ -1430,7 +1430,7 @@ namespace Infrastructure.Persistence.Migrations
                             Id = 2,
                             Color = "#6B7280",
                             K = "r",
-                            Multinivel = false,
+                            Multinivel = true,
                             Nombre = "Roles"
                         },
                         new
@@ -1438,7 +1438,7 @@ namespace Infrastructure.Persistence.Migrations
                             Id = 3,
                             Color = "#6B7280",
                             K = "o",
-                            Multinivel = false,
+                            Multinivel = true,
                             Nombre = "Organizaciones"
                         },
                         new
@@ -1470,7 +1470,7 @@ namespace Infrastructure.Persistence.Migrations
                             Id = 7,
                             Color = "#6B7280",
                             K = "t",
-                            Multinivel = false,
+                            Multinivel = true,
                             Nombre = "Estadisticas"
                         },
                         new
@@ -1478,7 +1478,7 @@ namespace Infrastructure.Persistence.Migrations
                             Id = 8,
                             Color = "#6B7280",
                             K = "m",
-                            Multinivel = false,
+                            Multinivel = true,
                             Nombre = "Modulo"
                         });
                 });
@@ -2173,7 +2173,7 @@ namespace Infrastructure.Persistence.Migrations
                             IpCreacion = "127.0.0.1",
                             Nombre = "Admin",
                             OrganizacionId = 1,
-                            PasswordHash = "AQAAAAIAAYagAAAAEBs13pDjqsTJqwOdL5ZJ9orH7LrEiAsuMDA9ExlffMMS48vN/JIjibvVDZJBZ3CwSw==",
+                            PasswordHash = "AQAAAAIAAYagAAAAECY7cGIaC013qlPqpxuiJEOwRsfgzIub/0KoYNBnkl+YCFLFdsJ20R0egw3oxpABcA==",
                             RoleId = 1,
                             Tipo = 3
                         },
@@ -2192,7 +2192,7 @@ namespace Infrastructure.Persistence.Migrations
                             IpCreacion = "127.0.0.1",
                             Nombre = "Demo",
                             OrganizacionId = 1,
-                            PasswordHash = "AQAAAAIAAYagAAAAEMK2vJy4wT+hcsYv/FY8diEWZ8WKbueC0dHXZc86x/JkQVSslb2UHEdswl0tilJU6w==",
+                            PasswordHash = "AQAAAAIAAYagAAAAEC7HJrLSLCBe0TxfX3a0Su1o8FHBUWl/ESsi4ePts22lCYHXjE+QdVU6V7qy+W+gxA==",
                             RoleId = 2,
                             Tipo = 1
                         });
