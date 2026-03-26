@@ -14,19 +14,14 @@ public static class ModuloMapper
     {
         if (m == null) return null!;
 
-        // Función interna para procesar el icono/imagen
         string? ProcessIcono(string? iconoValue)
         {
             if (string.IsNullOrEmpty(iconoValue) || s3Service == null)
                 return iconoValue;
 
-            // Lógica para iconos de fuente (ej: "shield", "user-lock")
-            // Si no tiene extensión y es corto, asumimos que es una clase de CSS/Icono
             if (!iconoValue.Contains(".") && iconoValue.Length < 30) 
                 return iconoValue;
 
-            // 🔥 CAMBIO CLAVE: Para iconos del sistema, usamos GetFileUrl (URL Pública)
-            // GetFileUrl ya sabe manejar el prefijo dev/prod internamente.
             return s3Service.GetFileUrl(iconoValue);
         }
 
@@ -36,7 +31,9 @@ public static class ModuloMapper
             Nombre = m.Nombre,
             K = m.K,
             Color = m.Color ?? "#6B7280",
-            Icono = ProcessIcono(m.Icono)
+            Icono = ProcessIcono(m.Icono),
+            // 🔥 AGREGADO: Mapeo al Response
+            Multinivel = m.Multinivel 
         };
     }
 
@@ -49,12 +46,13 @@ public static class ModuloMapper
         {
             Nombre = request.Nombre,
             K = request.K,
-            Color = string.IsNullOrEmpty(request.Color) ? "#6B7280" : request.Color
-            // El Icono se asigna en el Controller después de subir a S3
+            Color = string.IsNullOrEmpty(request.Color) ? "#6B7280" : request.Color,
+            // 🔥 AGREGADO: Mapeo del Request a la Entidad
+            // Si en el DTO es bool?, usa .GetValueOrDefault(true) para respetar tu default
+            Multinivel = request.Multinivel ?? true 
         };
     }
 
-    // 3. Para mapear colecciones
     public static IEnumerable<ModuloResponse> ToResponseList(
         this IEnumerable<Modulo> modulos, 
         IS3Service? s3Service = null)

@@ -1,15 +1,14 @@
 using Microsoft.AspNetCore.Http;
-using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
 namespace EmpadronamientoBackend.Application.DTOs.Requests;
 
 public class ModuloRequest
 {
-    [Required]
+    [Required(ErrorMessage = "El nombre del módulo es obligatorio.")]
     public string Nombre { get; set; } = null!;
 
-    [Required]
+    [Required(ErrorMessage = "La clave corta (K) es obligatoria.")]
     [MaxLength(10)]
     public string K { get; set; } = null!;
 
@@ -18,5 +17,8 @@ public class ModuloRequest
     // Para subir un archivo físico (PNG/SVG)
     public IFormFile? IconoArchivo { get; set; }
 
-
+    // 🔥 AGREGADO: Propiedad Multinivel
+    // Se pone como bool? para que el [Required] detecte si el front NO lo mandó.
+    [Required(ErrorMessage = "Debes especificar si el módulo es Multinivel.")]
+    public bool? Multinivel { get; set; }
 }

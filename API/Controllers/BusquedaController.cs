@@ -46,7 +46,7 @@ public class BusquedaController : BaseController
     }
 
     [HttpPost("biometrica")]
-    [AuthLvl("b", 1)] // Ajusta la letra y nivel según tus permisos de búsqueda
+    [AuthLvl("b", 1)] 
     [Consumes("multipart/form-data")]
     [EndpointSummary("Paso 1: Búsqueda Biométrica Rápida (Retorna info básica de los matches)")]
     public async Task<IActionResult> BuscarPorRostro(IFormFile archivo)
@@ -147,6 +147,89 @@ public class BusquedaController : BaseController
             return Error("Ocurrió un problema al procesar la búsqueda facial.", "BIOMETRIC_SEARCH_ERROR");
         }
     }
+    [HttpGet("{personaId}/basico")]
+    [AuthLvl("b", 1)]
+    [EndpointSummary("Obtener información básica de una persona (Datos, Direcciones, Familiares y Redes)")]
+    public async Task<IActionResult> ObtenerDatosBasicosPersona(int personaId)
+    {
+        try
+        {
+            // 1. Consulta ligera: Solo traemos las 3 relaciones solicitadas
+            var p = await _context.Personas
+                .Include(x => x.Direcciones)
+                .Include(x => x.Familiares)
+                .Include(x => x.RedesSociales)
+                .FirstOrDefaultAsync(x => x.Id == personaId);
+
+            if (p == null)
+                return Error("Persona no encontrada o sin acceso.", "PERSONA_NOT_FOUND");
+
+            // 2. Mapeo a la respuesta simplificada
+            var datosBasicos = new PersonaBasicoResponse
+            {
+                PersonaId = p.Id,
+                Nombre = p.Nombre ?? "",
+                ApellidoPaterno = p.ApellidoPaterno ?? "",
+                ApellidoMaterno = p.ApellidoMaterno ?? "",
+                Apodo = p.Apodo,
+                Sexo = p.Sexo,
+                Edad = p.Edad,
+                Estatura = p.Estatura,
+                FechaNacimiento = p.FechaNacimiento?.ToString("yyyy-MM-dd"),
+                Nacionalidad = p.Nacionalidad,
+                Originario = p.Originario,
+                Telefono = p.Telefono,
+                EstadoCivil = p.EstadoCivil,
+                Escolaridad = p.Escolaridad,
+                OficioProfesion = p.OficioProfesion,
+                ObservacionesGenerales = p.ObservacionesGenerales,
+
+                // Direcciones Personales (USANDO EL DTO CON ID)
+                Direcciones = p.Direcciones.Select(d => new DireccionDto
+                {
+                    Id = d.Id, // 🔥 Asegurado el mapeo del ID
+                    Calle = d.Calle ?? "",
+                    NumeroExterior = d.NumeroExterior ?? "",
+                    NumeroInterior = d.NumeroInterior ?? "",
+                    Cp = d.CP,
+                    Colonia = d.Colonia ?? "",
+                    Municipio = d.Municipio ?? "",
+                    Estado = d.Estado ?? "",
+                    Pais = d.Pais ?? "",
+                    Referencia = d.Referencia,
+                    Latitud = d.Latitud,
+                    Longitud = d.Longitud,
+                    EsPrincipal = d.EsPrincipal
+                }).ToList(),
+
+                // Familiares (USANDO EL DTO CON ID)
+                Familiares = p.Familiares.Select(f => new FamiliarDto
+                {
+                    Id = f.Id, // 🔥 Asegurado el mapeo del ID
+                    NombreCompleto = f.NombreCompleto ?? "",
+                    Parentesco = f.Parentesco ?? "N/A",
+                    Telefono = f.Telefono,
+                    Direccion = f.Direccion
+                }).ToList(),
+
+                // Redes Sociales (USANDO EL DTO CON ID)
+                RedesSociales = p.RedesSociales.Select(rs => new RedSocialDto
+                {
+                    Id = rs.Id, // 🔥 Asegurado el mapeo del ID
+                    TipoRedSocial = rs.TipoRedSocial ?? "",
+                    Usuario = rs.Usuario ?? "",
+                    UrlPerfil = rs.UrlPerfil
+                }).ToList()
+            };
+
+            return Result(datosBasicos, "Datos básicos recuperados exitosamente.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar datos básicos de persona {PersonaId}", personaId);
+            return Error("Ocurrió un problema al consultar la información de la persona.", "BASIC_INFO_ERROR");
+        }
+    }
 
     [HttpGet("{personaId}/resumen")]
     [AuthLvl("b", 1)]
@@ -155,11 +238,9 @@ public class BusquedaController : BaseController
     {
         try
         {
-            int orgId = _currentUser.OrganizacionId;
-
             // 1. Consulta profunda: Traemos todo el árbol
             var p = await _context.Personas
-                .Include(x => x.Caras)
+                // .Include(x => x.Caras) // Comentado/Eliminado si ya arreglaste lo de Foto vs Cara
                 .Include(x => x.Fotos)
                 .Include(x => x.Direcciones)
                 .Include(x => x.Familiares)
@@ -167,7 +248,7 @@ public class BusquedaController : BaseController
                 .Include(x => x.Empadronamientos)
                     .ThenInclude(ep => ep.Empadronamiento)
                         .ThenInclude(e => e.Lugar)
-                .FirstOrDefaultAsync(x => x.Id == personaId && x.OrganizacionId == orgId);
+                .FirstOrDefaultAsync(x => x.Id == personaId);
 
             if (p == null)
                 return Error("Expediente no encontrado o sin acceso.", "PERSONA_NOT_FOUND");
@@ -195,17 +276,17 @@ public class BusquedaController : BaseController
                 OficioProfesion = p.OficioProfesion,
                 ObservacionesGenerales = p.ObservacionesGenerales,
 
-                // Objeto Rostro
                 Rostro = fotoPrincipal != null ? new RostroDto { FotoId = fotoPrincipal.Id } : null,
                 FotoPrincipalUrl = fotoPrincipal != null ? _s3Service.GetPreSignedUrl(fotoPrincipal.S3Key) : null,
 
-                // Direcciones Personales
+                // Direcciones Personales (USANDO EL MISMO DTO CON ID)
                 Direcciones = p.Direcciones.Select(d => new DireccionDto
                 {
+                    Id = d.Id, // 🔥 Ahora mapea el ID también en el resumen completo
                     Calle = d.Calle ?? "",
                     NumeroExterior = d.NumeroExterior ?? "",
                     NumeroInterior = d.NumeroInterior ?? "",
-                    Cp = d.CP, // ⚠️ Ahora sí mapeado correctamente a d.CP
+                    Cp = d.CP,
                     Colonia = d.Colonia ?? "",
                     Municipio = d.Municipio ?? "",
                     Estado = d.Estado ?? "",
@@ -216,16 +297,20 @@ public class BusquedaController : BaseController
                     EsPrincipal = d.EsPrincipal
                 }).ToList(),
 
+                // Familiares (USANDO EL MISMO DTO CON ID)
                 Familiares = p.Familiares.Select(f => new FamiliarDto
                 {
+                    Id = f.Id, // 🔥 Ahora mapea el ID también en el resumen completo
                     NombreCompleto = f.NombreCompleto ?? "",
                     Parentesco = f.Parentesco ?? "N/A",
                     Telefono = f.Telefono,
                     Direccion = f.Direccion
                 }).ToList(),
 
+                // Redes Sociales (USANDO EL MISMO DTO CON ID)
                 RedesSociales = p.RedesSociales.Select(rs => new RedSocialDto
                 {
+                    Id = rs.Id, // 🔥 Ahora mapea el ID también en el resumen completo
                     TipoRedSocial = rs.TipoRedSocial ?? "",
                     Usuario = rs.Usuario ?? "",
                     UrlPerfil = rs.UrlPerfil
@@ -251,20 +336,19 @@ public class BusquedaController : BaseController
                         Crpn = ep.Empadronamiento.CRP ?? "",
                         NarrativaHechos = ep.Empadronamiento.NarrativaHechos ?? "",
 
-                        // 🔥 Lugar del evento
                         Lugar = ep.Empadronamiento.Lugar != null ? new LugarDto
                         {
                             Calle = ep.Empadronamiento.Lugar.Calle ?? "",
                             NumeroExterior = ep.Empadronamiento.Lugar.NumeroExterior ?? "",
                             NumeroInterior = ep.Empadronamiento.Lugar.NumeroInterior ?? "",
-                            Cp = ep.Empadronamiento.Lugar.CP, // ⚠️ Ahora sí mapeado a CP
+                            Cp = ep.Empadronamiento.Lugar.CP,
                             Colonia = ep.Empadronamiento.Lugar.Colonia ?? "",
                             Municipio = ep.Empadronamiento.Lugar.Municipio ?? "",
                             Estado = ep.Empadronamiento.Lugar.Estado ?? "",
                             Referencia = ep.Empadronamiento.Lugar.Referencia,
                             Latitud = ep.Empadronamiento.Lugar.Latitud,
                             Longitud = ep.Empadronamiento.Lugar.Longitud,
-                            ImagenID = ep.Empadronamiento.Lugar.ImagenId > 0 ? ep.Empadronamiento.Lugar.ImagenId : null // ⚠️ Ahora sí mapeado a ImagenId
+                            ImagenID = ep.Empadronamiento.Lugar.ImagenId > 0 ? ep.Empadronamiento.Lugar.ImagenId : null
                         } : null
                     })
                     .OrderByDescending(e => e.Fecha)

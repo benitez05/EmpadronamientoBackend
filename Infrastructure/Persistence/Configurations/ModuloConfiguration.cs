@@ -23,6 +23,12 @@ public class ModuloConfiguration : IEntityTypeConfiguration<Modulo>
         builder.HasIndex(m => m.K)
             .IsUnique();
 
+        // --- CONFIGURACIÓN DE MULTINIVEL ---
+        // Se establece en true por defecto en la base de datos
+        builder.Property(m => m.Multinivel)
+            .IsRequired()
+            .HasDefaultValue(true);
+
         // --- CONFIGURACIÓN DEL COLOR ---
         builder.Property(m => m.Color)
             .IsRequired()
