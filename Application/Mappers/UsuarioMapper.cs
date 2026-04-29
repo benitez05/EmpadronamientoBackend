@@ -37,7 +37,8 @@ public static class UsuarioMapper
             Tipo = u.Tipo,
             // Mapeo del Rol (Asegúrate de tener el ToResponse en el mapper de Roles)
             Rol = u.Role?.ToResponse(), 
-            ImagenUrl = GenerateUrl(u.Imagen) 
+            ImagenUrl = GenerateUrl(u.Imagen),
+            CorreoConfirmado = u.CorreoConfirmado
         };
     }
 

@@ -9,8 +9,8 @@ public class UsuarioResponse
     public string? Celular { get; set; }
     public required int Tipo { get; set; }
     public RoleResponse? Rol { get; set; }
-
     public string? ImagenUrl { get; set; }
+    public required bool CorreoConfirmado { get; set; }
 
 
 }

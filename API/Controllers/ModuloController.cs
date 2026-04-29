@@ -7,6 +7,7 @@ using EmpadronamientoBackend.Application.Mappers;
 using EmpadronamientoBackend.Infrastructure.Persistence;
 using EmpadronamientoBackend.Application.Interfaces;
 using BenitezLabs.Domain.Entities;
+using Microsoft.AspNetCore.Authorization;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
@@ -26,7 +27,7 @@ public class ModulosController : BaseController
     }
 
     [HttpGet]
-    [AuthLvl("m", 1)]
+    [Authorize]
     [EndpointSummary("Listado completo de módulos con URLs de iconos")]
     public async Task<IActionResult> GetAll()
     {

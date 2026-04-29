@@ -201,7 +201,7 @@ namespace EmpadronamientoBackend.Infrastructure.Services
 
             var face = response.FaceDetails.First();
 
-            if (face.EyesOpen?.Value == false || (face.EyesOpen?.Confidence < 80))
+            if (face.EyesOpen?.Value == false || (face.EyesOpen?.Confidence < 70))
             {
                 return new FaceValidationResult { IsValid = false, ErrorMessage = "Los ojos deben estar abiertos." };
             }
