@@ -20,4 +20,7 @@ public class RegisterRequest
     [DefaultValue(1)]
     [Range(1, int.MaxValue, ErrorMessage = "Debes seleccionar un rol válido.")]
     public required int RoleId { get; set; } 
+
+    [DefaultValue("administrador o usuario")] 
+    public required String TipoUsuario { get; set; } 
 }

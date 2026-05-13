@@ -109,7 +109,7 @@ public class OrganizacionesController : BaseController
                 await CrearCatalogosBaseAsync(nuevaOrg.Id);
 
                 var modulosBase = await _context.Modulos
-                    .Where(m => m.K == "u" || m.K == "r" || m.K == "o" || m.K == "c" || m.K == "e")
+                    .Where(m => m.K == "u" || m.K == "r" || m.K == "o" || m.K == "c" || m.K == "e" || m.K == "p")
                     .ToListAsync();
 
                 foreach (var m in modulosBase)

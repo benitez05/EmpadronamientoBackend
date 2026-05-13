@@ -60,19 +60,24 @@ public class AuthController : BaseController
         var orgId = _currentUser.OrganizacionId;
         if (orgId == 0) return Error("No se pudo determinar tu organización.");
 
+        if (request.TipoUsuario != "administrador" && request.TipoUsuario != "usuario")
+            return Error("El tipo de usuario seleccionado no es válido.");
+
         // 2. VALIDACIÓN DEL ROL: ¿Existe y pertenece a mi empresa?
         var rolExiste = await _context.Roles
             .AnyAsync(r => r.Id == request.RoleId && r.OrganizacionId == orgId);
 
         if (!rolExiste)
-            return Error("El rol seleccionado no es válido.");
+            return Error("El rol seleccionado no es válido."); 
 
         // 3. Creación
         var user = request.ToEntity();
         user.PasswordHash = _passwordService.HashPassword(user, request.Password);
         user.OrganizacionId = orgId;
         user.RoleId = request.RoleId; // Usamos el ID del request
-        user.Tipo = 1;
+        if (request.TipoUsuario == "administrador"){user.Tipo = 2;}
+        else{user.Tipo = 1;}
+            
 
         _context.Usuarios.Add(user);
         await _context.SaveChangesAsync();

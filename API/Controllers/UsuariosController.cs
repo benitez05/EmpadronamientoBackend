@@ -10,138 +10,34 @@ using BenitezLabs.Domain.Entities;
 
 namespace EmpadronamientoBackend.API.Controllers;
 
+/// <summary>
+/// Controlador para la administración de usuarios del sistema.
+/// </summary>
 [Route("api/[controller]")]
 [ApiController]
 public class UsuariosController : BaseController
 {
     private readonly ApplicationDbContext _context;
-    private readonly ICacheService _cacheService;
     private readonly ICurrentUserService _currentUser;
     private readonly IS3Service _s3Service;
 
     public UsuariosController(
         ApplicationDbContext context,
-        ICacheService cacheService,
         IS3Service s3Service,
         ICurrentUserService currentUser)
     {
         _context = context;
-        _cacheService = cacheService;
         _currentUser = currentUser;
         _s3Service = s3Service;
     }
 
-    #region GESTIÓN DE SESIONES Y SEGURIDAD (USER ME)
-
-    [HttpGet("me/sessions")]
-    [AuthLvl("u", 1)]
-    [EndpointSummary("Listar sesiones activas del usuario logueado")]
-    public async Task<IActionResult> GetMySessions()
-    {
-        var userId = int.Parse(_currentUser.UserId!);
-        var currentJti = _currentUser.Jti;
-
-        var sesiones = await _context.UsuarioSesiones
-            .Where(s => s.UsuarioId == userId)
-            .Select(s => new
-            {
-                s.Id,
-                s.DeviceInfo,
-                s.IpAddress,
-                s.FechaCreacion,
-                EsActual = s.Jti == currentJti
-            })
-            .ToListAsync();
-
-        return Result(sesiones, "Lista de dispositivos vinculados.");
-    }
-
-    [HttpPut("{id}")]
-    [AuthLvl("u", 2)]
-    [EndpointSummary("Editar perfil de usuario")]
-    [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Update(int id, [FromForm] UpdateUsuarioRequest request)
-    {
-        var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
-        if (usuario == null)
-        {
-            return Error("Usuario no encontrado.");
-        }
-
-        string previousImage = usuario.Imagen;
-
-        // Subida de imagen si se proporciona
-        if (request.Imagen != null && request.Imagen.Length > 0)
-        {
-            try
-            {
-                // 1. Definimos la subcarpeta funcional
-                // Ahora: usuarios / {orgId} / {archivo}
-                var pathSugerido = $"usuarios/{usuario.OrganizacionId}/{Guid.NewGuid()}{Path.GetExtension(request.Imagen.FileName)}";
-                using var stream = request.Imagen.OpenReadStream();
-
-                // 2. El servicio inyecta el prefijo (dev/prod) y nos da la ruta completa
-                var keyFinal = await _s3Service.UploadImageAsync(stream, pathSugerido, request.Imagen.ContentType);
-
-                // 3. Guardamos la key final con prefijo en la BD
-                usuario.Imagen = keyFinal;
-
-                // Eliminar imagen anterior si existía
-                if (!string.IsNullOrEmpty(previousImage))
-                {
-                    try
-                    {
-                        // Como previousImage ya tiene el prefijo, el servicio la encontrará sin problemas
-                        await _s3Service.DeleteImageAsync(previousImage);
-                    }
-                    catch (Exception)
-                    {
-                        // No interrumpimos la actualización por un fallo en eliminar la imagen anterior
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                return Error("No se pudo subir la imagen proporcionada.");
-            }
-        }
-
-        usuario.Nombre = request.Nombre;
-        usuario.Apellidos = request.Apellidos;
-        usuario.Celular = request.Celular;
-
-        await _context.SaveChangesAsync();
-
-        // El Mapper ToResponse usará s3Service.GetFileUrl internamente
-        return Result(usuario.ToResponse(_s3Service), "Los datos del usuario han sido actualizados.");
-    }
-
-    [HttpDelete("me/sessions/{id}")]
-    [AuthLvl("u", 1)]
-    [EndpointSummary("Cerrar sesión remota propia")]
-    public async Task<IActionResult> RevokeSession(int id)
-    {
-        var userId = int.Parse(_currentUser.UserId!);
-
-        var sesion = await _context.UsuarioSesiones
-            .FirstOrDefaultAsync(s => s.Id == id && s.UsuarioId == userId);
-
-        if (sesion == null) return Error("Sesión no encontrada.");
-
-        await _cacheService.SetAsync($"revoked_{sesion.Jti}", true, TimeSpan.FromHours(2));
-
-        _context.UsuarioSesiones.Remove(sesion);
-        await _context.SaveChangesAsync();
-
-        return Result(true, "Dispositivo desconectado correctamente.");
-    }
-
-    #endregion
-
     #region ADMINISTRACIÓN DE USUARIOS (CRUD & STATUS)
 
+    /// <summary>
+    /// Obtiene un listado paginado de usuarios.
+    /// </summary>
     [HttpGet]
-    [AuthLvl("u", 4)]
+    [AuthLvl("u", 2)]
     [EndpointSummary("Listado de usuarios")]
     public async Task<IActionResult> GetAll([FromQuery] UsuarioFilterParams filter, [FromQuery] PaginationParams pagination)
     {
@@ -163,13 +59,15 @@ public class UsuariosController : BaseController
             .Take(pagination.PageSize)
             .ToListAsync();
 
-        // Enviamos s3Service para que las URLs de las fotos de la lista se generen bien
         return Paged(usuarios.ToResponseList(_s3Service), pagination, totalRecords, "Usuarios recuperados.");
     }
 
+    /// <summary>
+    /// Obtiene los detalles de un usuario específico.
+    /// </summary>
     [HttpGet("{id}")]
     [AuthLvl("u", 1)]
-    [EndpointSummary("Detalle del usuario")]
+    [EndpointSummary("Obtiene la informacion de un usuario")]
     public async Task<IActionResult> GetById(int id)
     {
         var usuario = await _context.Usuarios
@@ -181,8 +79,70 @@ public class UsuariosController : BaseController
         return Result(usuario.ToResponse(_s3Service), "Detalle del usuario recuperado.");
     }
 
+    /// <summary>
+    /// Edita la información básica y de perfil de un usuario específico.
+    /// </summary>
+    /// <param name="id">El identificador único del usuario a editar.</param>
+    /// <param name="request">Los datos a actualizar, incluyendo la imagen de perfil opcional.</param>
+    [HttpPut("{id}")]
+    [AuthLvl("u", 2)]
+    [EndpointSummary("Editar perfil de un usuario específico")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> Update(int id, [FromForm] UpdateUsuarioRequest request)
+    {
+        var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
+        if (usuario == null)
+        {
+            return Error("Usuario no encontrado.");
+        }
+
+        string previousImage = usuario.Imagen;
+
+        // Subida de imagen si se proporciona
+        if (request.Imagen != null && request.Imagen.Length > 0)
+        {
+            try
+            {
+                var pathSugerido = $"usuarios/{usuario.OrganizacionId}/{Guid.NewGuid()}{Path.GetExtension(request.Imagen.FileName)}";
+                using var stream = request.Imagen.OpenReadStream();
+
+                var keyFinal = await _s3Service.UploadImageAsync(stream, pathSugerido, request.Imagen.ContentType);
+
+                usuario.Imagen = keyFinal;
+
+                if (!string.IsNullOrEmpty(previousImage))
+                {
+                    try
+                    {
+                        await _s3Service.DeleteImageAsync(previousImage);
+                    }
+                    catch (Exception)
+                    {
+                        // Se ignora para no interrumpir la actualización
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                return Error("No se pudo subir la imagen proporcionada.");
+            }
+        }
+
+        usuario.Nombre = request.Nombre;
+        usuario.Apellidos = request.Apellidos;
+        usuario.Celular = request.Celular;
+
+        await _context.SaveChangesAsync();
+
+        return Result(usuario.ToResponse(_s3Service), "Los datos del usuario han sido actualizados.");
+    }
+
+    /// <summary>
+    /// Modifica el rol de un usuario existente.
+    /// </summary>
     [HttpPut("{id}/role")]
-    [AuthLvl("u", 3)]
+    [AuthLvl("u", 2)]
+    [EndpointSummary("Actualiza el role de un usuario")]
     public async Task<IActionResult> UpdateRole(int id, [FromBody] UpdateRoleRequest request)
     {
         var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Id == id);
@@ -200,8 +160,12 @@ public class UsuariosController : BaseController
 
     public record UpdateRoleRequest(int NewRoleId);
 
+    /// <summary>
+    /// Activa o desactiva la cuenta de un usuario.
+    /// </summary>
     [HttpPatch("{id}/status")]
-    [AuthLvl("u", 3)]
+    [AuthLvl("u", 2)]
+    [EndpointSummary("Alterna el estatus de un usuario entre activado y desactivado")]
     public async Task<IActionResult> ToggleStatus(int id)
     {
         if (id == int.Parse(_currentUser.UserId!))
