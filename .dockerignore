@@ -1,0 +1,11 @@
+# Carpetas de control de versiones y editores
+.git/
+.vs/
+.vscode/
+
+# Ignorar TODAS las carpetas de compilación local de tus capas de Clean Architecture
+**/bin/
+**/obj/
+
+# Archivos de configuración local que no queremos mezclar
+appsettings.Development.json

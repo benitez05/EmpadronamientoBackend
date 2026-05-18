@@ -63,56 +63,80 @@ public class RolesController : BaseController
         return Result(nuevoRol.ToResponse(), "Rol creado correctamente.");
     }
 
-    [HttpPost("assign-permission")]
-    [AuthLvl("r", 2)]
-    [EndpointSummary("Asignar o actualizar permisos")]
-    [EndpointDescription("Vincula un rol con un módulo y le asigna un nivel de acceso (1-5). Si la relación ya existe, actualiza el nivel.")]
-    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> AssignPermission([FromBody] AsignarPermisoRequest request)
-    {
-        // Validación de rango de nivel
-        if (request.Lvl < 1 || request.Lvl > 5) return Error("El nivel debe estar entre 1 y 5.");
 
-        if (!await _context.Roles.AnyAsync(r => r.Id == request.RoleId)) return Error("Rol no encontrado.");
-        if (!await _context.Modulos.AnyAsync(m => m.Id == request.ModuloId)) return Error("Módulo no encontrado.");
-
-        var permiso = await _context.RolesPermisos
-            .FirstOrDefaultAsync(rp => rp.RoleId == request.RoleId && rp.ModuloId == request.ModuloId);
-
-        if (permiso == null)
-        {
-            permiso = new RolePermiso { RoleId = request.RoleId, ModuloId = request.ModuloId, Lvl = request.Lvl };
-            _context.RolesPermisos.Add(permiso);
-        }
-        else
-        {
-            permiso.Lvl = request.Lvl;
-        }
-
-        await _context.SaveChangesAsync();
-        return Result(true, "Permiso asignado exitosamente.");
-    }
-
-    [HttpDelete("{id}")]
+    [HttpPut("{id}")]
     [AuthLvl("r", 3)]
-    [EndpointSummary("Eliminar un rol")]
-    [EndpointDescription("Borra un rol de la base de datos siempre y cuando no tenga usuarios vinculados a él.")]
+    [EndpointSummary("Editar un rol")]
+    [EndpointDescription("Actualiza la información básica de un rol (como su nombre), validando que no exista un duplicado en la organización.")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Delete(int id)
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateRole([FromRoute] int id, [FromBody] RoleUpdateRequestDto request)
     {
+        // 1. Buscar el rol a editar
         var role = await _context.Roles.FindAsync(id);
-        if (role == null) return Error("Rol no encontrado.");
+        if (role == null) 
+            return Error("El rol especificado no existe.");
 
-        // Regla de integridad de negocio
-        if (await _context.Usuarios.AnyAsync(u => u.RoleId == id))
+        // 2. Limpiar el texto (quitar espacios en blanco al inicio y al final)
+        var nuevoNombre = request.Nombre.Trim();
+
+        // 3. Validar si el usuario realmente cambió el nombre
+        // Si mandó el mismo nombre que ya tenía, evitamos hacer la consulta a la BD
+        if (role.Nombre.Equals(nuevoNombre, StringComparison.OrdinalIgnoreCase))
         {
-            return Error("No se puede eliminar el rol porque tiene usuarios asociados.");
+            return Result(true, "El rol fue actualizado (sin cambios en el nombre).");
         }
 
-        _context.Roles.Remove(role);
+        // 4. Validar que el nombre no esté repetido en OTRA entidad de la misma organización
+        var nombreRepetido = await _context.Roles
+            .AnyAsync(r => r.Id != id && r.Nombre.ToLower() == nuevoNombre.ToLower());
+
+        if (nombreRepetido) 
+            return Error($"Ya existe un rol con el nombre '{nuevoNombre}' en la organización.");
+
+        // 5. Actualizar los datos
+        role.Nombre = nuevoNombre;
+
+        // Nota: Como tu entidad hereda de AuditoriaEntidad, tu interceptor o 
+        // método SaveChanges() seguramente ya se encarga de actualizar la FechaActualizacion.
         await _context.SaveChangesAsync();
 
-        return Result(true, "Rol eliminado correctamente.");
+        return Result(true, "Rol actualizado correctamente.");
+    }
+
+    [HttpPost("reassign-delete")]
+    [AuthLvl("r", 3)]
+    [EndpointSummary("Eliminar rol y reasignar usuarios (Mediante DTO)")]
+    [EndpointDescription("Reasigna todos los usuarios del rol a eliminar hacia un rol sustituto y luego borra el rol original.")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteAndReassign([FromBody] RoleDeleteRequestDto request)
+    {
+        // 1. Validar lógica de negocio
+        if (request.RoleIdAEliminar == request.RoleIdSustituto)
+            return Error("El rol a eliminar y el rol sustituto no pueden ser el mismo.");
+
+        // 2. Buscar el rol a eliminar
+        var roleAEliminar = await _context.Roles.FindAsync(request.RoleIdAEliminar);
+        if (roleAEliminar == null) 
+            return Error("El rol que deseas eliminar no fue encontrado.");
+
+        // 3. Validar que el rol sustituto exista en el tenant
+        var roleSustitutoExiste = await _context.Roles.AnyAsync(r => r.Id == request.RoleIdSustituto);
+        if (!roleSustitutoExiste) 
+            return Error("El rol sustituto especificado no existe.");
+
+        // 4. MIGRACIÓN MASIVA ULTRA RÁPIDA (ExecuteUpdateAsync)
+        await _context.Usuarios
+            .Where(u => u.RoleId == request.RoleIdAEliminar)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.RoleId, request.RoleIdSustituto));
+
+        // 5. Eliminar el rol original de la base de datos
+        _context.Roles.Remove(roleAEliminar);
+        await _context.SaveChangesAsync();
+
+        return Result(true, "Rol eliminado y usuarios reasignados correctamente.");
     }
 }

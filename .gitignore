@@ -11,3 +11,13 @@
 # Archivos de configuración con datos sensibles
 API/appsettings.Development.json
 API/appsettings.json
+
+# -----------------------------------------------------------
+# DOCKER Y VARIABLES DE ENTORNO LOCALES
+# -----------------------------------------------------------
+# Ignorar el archivo de variables reales para no filtrar credenciales
+.env
+
+# (Opcional) Evitar que los volúmenes o bases de datos locales de Docker 
+# se suban por accidente si los llegas a crear dentro de la carpeta del proyecto
+.docker/
