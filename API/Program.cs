@@ -8,6 +8,8 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Scalar.AspNetCore;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.EntityFrameworkCore; // 🔥 IMPORTANTE PARA dbContext.Database.Migrate()
+
 // 🔥 USINGS PARA AWS
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
@@ -48,7 +50,8 @@ builder.Services.AddOpenApi(options =>
         document.Servers = new List<OpenApiServer>
         {
             new OpenApiServer { Url = "http://143.198.231.51:5000", Description = "DigitalOcean (Producción)" },
-            new OpenApiServer { Url = "http://localhost:5034", Description = "Local (Desarrollo)" }
+            new OpenApiServer { Url = "http://localhost:5034", Description = "Local (Desarrollo)" },
+            new OpenApiServer { Url = "http://localhost:8080", Description = "Local (Desarrollo 2 test)" }
         };
         return Task.CompletedTask;
     });
@@ -75,7 +78,6 @@ using (var scope = app.Services.CreateScope())
         var rekognitionClient = scope.ServiceProvider.GetRequiredService<IAmazonRekognition>();
         var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         
-        // Lee la colección (Empadronamiento-Dev o Empadronamiento-Prod)
         var collectionId = config["AWS:Rekognition:Collections:Empadronamiento"];
 
         if (!string.IsNullOrEmpty(collectionId))
@@ -101,8 +103,29 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        // Si AWS no responde, logueamos el error pero permitimos que la API inicie
         logger.LogError(ex, "[AWS] Error crítico al inicializar Rekognition.");
+    }
+}
+// =================================================================
+
+// =================================================================
+// 🔥 AUTO-MIGRACIÓN DE BASE DE DATOS 🔥
+// =================================================================
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try 
+    {
+        // ⚠️ REEMPLAZA 'ApplicationDbContext' POR EL NOMBRE REAL DE TU CONTEXTO
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        
+        // Esto crea la BD si no existe y aplica las migraciones pendientes
+        dbContext.Database.Migrate(); 
+        logger.LogInformation("[BD] Base de datos verificada y migrada correctamente.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "[BD] Error crítico al inicializar o migrar la base de datos.");
     }
 }
 // =================================================================
