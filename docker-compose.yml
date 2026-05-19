@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   empadronamiento-api:
-    build: 
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/benitez05/empadronamientobackend:latest
     container_name: benitezlabs_empadronamiento_api
     restart: always
     ports:
