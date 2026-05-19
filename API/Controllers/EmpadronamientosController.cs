@@ -45,7 +45,7 @@ public class EmpadronamientosController : BaseController
     };
 
     [HttpPost("validar")]
-    [AuthLvl("e", 2)]
+    [AuthLvl("e", 1)]
     [EndpointSummary("Paso 1: Validar estructura del JSON de empadronamiento")]
     public IActionResult Validar([FromBody] CrearEmpadronamientoRequest request)
     {
@@ -56,7 +56,7 @@ public class EmpadronamientosController : BaseController
     }
 
     [HttpPost("subir-foto")]
-    [AuthLvl("e", 2)]
+    [AuthLvl("e", 1)]
     [Consumes("multipart/form-data")]
     [EndpointSummary("Paso 2: Subir foto a S3 y validar catálogo")]
     public async Task<IActionResult> SubirFoto(IFormFile archivo, [FromForm] string tipo)
@@ -116,7 +116,7 @@ public class EmpadronamientosController : BaseController
     /// - Biometría: Valida estrictamente que el FotoId proporcionado para el rostro sea de tipo 'Biométrico Facial', verifica que no haya sido indexado previamente, y lo registra en la colección de AWS Rekognition para búsquedas futuras.
     /// </summary>
     [HttpPost("completar")]
-    [AuthLvl("e", 2)]
+    [AuthLvl("e", 1)]
     [EndpointSummary("Paso 3: Guardado integral de empadronamiento (Creación de evento, Upsert de personas e indexación biométrica)")]
     public async Task<IActionResult> Completar([FromBody] CrearEmpadronamientoRequest request)
     {

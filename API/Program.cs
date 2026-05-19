@@ -51,9 +51,7 @@ builder.Services.AddOpenApi(options =>
         {
             new OpenApiServer { Url = "http://143.198.231.51:5000", Description = "DigitalOcean (Producción)" },
             new OpenApiServer { Url = "http://localhost:5034", Description = "Local (Desarrollo)" },
-            new OpenApiServer { Url = "http://localhost:8080", Description = "Local (Desarrollo 2 test)" },
-            new OpenApiServer { Url = "http://192.168.3.182:8080", Description = "Local (Desarrollo 2 test)" },
-            new OpenApiServer { Url = "https://emp-spii.robertobenitezg.com", Description = "Local (Desarrollo 2 test)" }
+            new OpenApiServer { Url = "https://emp-spii.robertobenitezg.com", Description = "(Desarrollo servidor )" }
         };
         return Task.CompletedTask;
     });
